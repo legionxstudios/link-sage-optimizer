@@ -4,10 +4,27 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { BarChart3, Link2, AlertTriangle } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+interface AnalysisResult {
+  url: string;
+  totalLinks: number;
+  issues: number;
+  status: "analyzing" | "complete" | "error";
+}
 
 const Index = () => {
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [results, setResults] = useState<AnalysisResult | null>(null);
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -15,17 +32,33 @@ const Index = () => {
       toast.error("Please enter a URL to analyze");
       return;
     }
-    
-    setIsAnalyzing(true);
-    // Simulate analysis
-    setTimeout(() => {
-      setIsAnalyzing(false);
+
+    try {
+      setIsAnalyzing(true);
+      console.log("Starting analysis for:", url);
+      
+      // Simulate analysis for now
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      setResults({
+        url,
+        totalLinks: Math.floor(Math.random() * 100),
+        issues: Math.floor(Math.random() * 10),
+        status: "complete"
+      });
+      
       toast.success("Analysis complete!");
-    }, 2000);
+    } catch (error) {
+      console.error("Analysis failed:", error);
+      toast.error("Failed to analyze URL");
+      setResults(null);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-background to-background/80">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -69,28 +102,79 @@ const Index = () => {
           </form>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="glass-card p-6 space-y-4">
-            <h3 className="text-lg font-semibold">Link Distribution</h3>
-            <div className="h-48 flex items-center justify-center border rounded-lg">
-              <p className="text-muted-foreground">Visualization coming soon</p>
-            </div>
-          </Card>
+        {results && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            className="grid grid-cols-1 gap-6"
+          >
+            <Card className="glass-card p-6">
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Analysis Results</h3>
+                  <div className="text-sm text-muted-foreground">
+                    Status: {results.status === "complete" ? "Complete" : "In Progress"}
+                  </div>
+                </div>
 
-          <Card className="glass-card p-6 space-y-4">
-            <h3 className="text-lg font-semibold">Quick Stats</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-lg bg-primary/5">
-                <div className="text-sm text-muted-foreground">Total Links</div>
-                <div className="text-2xl font-bold">0</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Link2 className="w-4 h-4" />
+                      Total Links
+                    </div>
+                    <div className="text-2xl font-bold">{results.totalLinks}</div>
+                  </Card>
+                  
+                  <Card className="p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <AlertTriangle className="w-4 h-4" />
+                      Issues Found
+                    </div>
+                    <div className="text-2xl font-bold">{results.issues}</div>
+                  </Card>
+                  
+                  <Card className="p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <BarChart3 className="w-4 h-4" />
+                      Health Score
+                    </div>
+                    <div className="text-2xl font-bold">
+                      {Math.max(0, 100 - (results.issues * 10))}%
+                    </div>
+                  </Card>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Issue Type</TableHead>
+                      <TableHead>Count</TableHead>
+                      <TableHead>Impact</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>Cannibalized Links</TableCell>
+                      <TableCell>{Math.floor(results.issues / 2)}</TableCell>
+                      <TableCell>
+                        <span className="text-yellow-600">Medium</span>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>Missing Internal Links</TableCell>
+                      <TableCell>{Math.ceil(results.issues / 2)}</TableCell>
+                      <TableCell>
+                        <span className="text-red-600">High</span>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
-              <div className="p-4 rounded-lg bg-primary/5">
-                <div className="text-sm text-muted-foreground">Issues Found</div>
-                <div className="text-2xl font-bold">0</div>
-              </div>
-            </div>
-          </Card>
-        </div>
+            </Card>
+          </motion.div>
+        )}
       </motion.div>
     </div>
   );
