@@ -5,34 +5,17 @@ import { PageIssuesList } from "./PageIssuesList";
 import { LinkSuggestions } from "./LinkSuggestions";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-interface PageContent {
-  url: string;
-  title: string;
-  content: string;
-  mainKeywords: string[];
-  internalLinksCount?: number;
-  externalLinksCount?: number;
-}
-
-interface AnalysisResult {
-  url: string;
-  status: "analyzing" | "complete" | "error";
-  pageContents?: Array<PageContent>;
-  outboundSuggestions?: Array<any>;
-  inboundSuggestions?: Array<any>;
-  linkScore?: number;
-}
+import { AnalysisResponse } from "@/services/crawlerService";
 
 interface AnalysisResultsProps {
-  results: AnalysisResult;
+  results: AnalysisResponse;
 }
 
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
   console.log("Raw analysis results:", results);
 
   // Add null checks and default values with proper typing
-  const pageContent: PageContent = results.pageContents?.[0] || {
+  const pageContent = results.pageContents?.[0] || {
     url: '',
     title: '',
     content: '',
@@ -68,7 +51,7 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Analysis Results</h3>
             <div className="text-sm text-muted-foreground">
-              Status: {results.status === "complete" ? "Complete" : "In Progress"}
+              Status: Complete
             </div>
           </div>
 
