@@ -52,7 +52,7 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
               <TableHead>Source Page</TableHead>
               <TableHead>Suggested Anchor Text</TableHead>
               <TableHead>Relevance</TableHead>
-              <TableHead>Context</TableHead>
+              <TableHead>Suggested Context</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -76,13 +76,13 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
                     {Math.round(suggestion.relevanceScore * 100)}%
                   </span>
                 </TableCell>
-                <TableCell className="max-w-[300px]">
+                <TableCell className="max-w-[400px]">
                   <Tooltip>
                     <TooltipTrigger className="cursor-help text-left">
-                      <span className="line-clamp-2">{suggestion.context}</span>
+                      <span className="line-clamp-3 whitespace-pre-wrap">{suggestion.context}</span>
                     </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{suggestion.context}</p>
+                    <TooltipContent className="max-w-[500px]">
+                      <p className="whitespace-pre-wrap">{suggestion.context}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TableCell>

@@ -35,21 +35,47 @@ serve(async (req) => {
     // Get main content area
     const mainContent = doc.querySelector('main, article, .content, .post-content, [role="main"]');
     let contentLinks;
+    let paragraphs;
     
     if (mainContent) {
-      // If we found a main content area, get links only from there
+      // If we found a main content area, get links and paragraphs only from there
       contentLinks = Array.from(mainContent.querySelectorAll('a[href]'));
+      paragraphs = Array.from(mainContent.querySelectorAll('p'));
     } else {
       // Fallback: get all links from paragraphs (likely content, not navigation)
       contentLinks = Array.from(doc.querySelectorAll('p a[href], article a[href]'));
+      paragraphs = Array.from(doc.querySelectorAll('p'));
     }
 
     const baseUrl = new URL(url).origin;
     const links = contentLinks
-      .map(link => ({
-        href: link.getAttribute('href'),
-        text: link.textContent?.trim()
-      }))
+      .map(link => {
+        const href = link.getAttribute('href');
+        const text = link.textContent?.trim();
+        
+        // Find the containing paragraph
+        const containingParagraph = link.closest('p');
+        let context = '';
+        
+        if (containingParagraph) {
+          const paragraphText = containingParagraph.textContent?.trim() || '';
+          // Get text before and after the link text within the paragraph
+          const linkIndex = paragraphText.indexOf(text || '');
+          if (linkIndex !== -1) {
+            const startContext = Math.max(0, linkIndex - 100);
+            const endContext = Math.min(paragraphText.length, linkIndex + (text?.length || 0) + 100);
+            context = paragraphText.substring(startContext, endContext);
+            // Highlight where the link should go
+            context = context.replace(text || '', `[${text}]`);
+          }
+        }
+
+        return {
+          href,
+          text,
+          context
+        };
+      })
       .filter(link => {
         if (!link.href || !link.text) return false;
         
@@ -63,10 +89,10 @@ serve(async (req) => {
         return isInternal && !isNavigation && !isBrandName;
       });
 
-    console.log('Content links extracted:', links.length);
+    console.log('Found valid links:', links.length);
 
-    const content = Array.from(doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6'))
-      .map(el => el.textContent)
+    const content = paragraphs
+      .map(p => p.textContent)
       .join(' ')
       .trim();
 
@@ -142,7 +168,7 @@ serve(async (req) => {
             targetUrl: url,
             suggestedAnchorText: link.text,
             relevanceScore,
-            context: content.substring(0, 200)
+            context: link.context || 'No context available'
           };
         } catch (error) {
           console.error('Error analyzing link:', link.text, error);
@@ -152,6 +178,8 @@ serve(async (req) => {
     );
 
     const validSuggestions = suggestions.filter(s => s !== null);
+    console.log('Valid suggestions:', validSuggestions.length);
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -161,7 +189,7 @@ serve(async (req) => {
       .insert({
         url,
         title,
-        content,
+        content: content.substring(0, 500),
         main_keywords: mainKeywords,
         suggestions: validSuggestions
       })
