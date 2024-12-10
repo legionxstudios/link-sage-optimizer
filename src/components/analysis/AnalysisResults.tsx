@@ -13,7 +13,6 @@ interface AnalysisResultsProps {
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
   console.log("Raw analysis results:", results);
 
-  // Add null checks and default values with proper typing
   const pageContent = results.pageContents?.[0] || {
     url: '',
     title: '',
@@ -31,7 +30,8 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
   console.log("Processing suggestions:", {
     outbound: results.outboundSuggestions,
-    inbound: results.inboundSuggestions
+    inbound: results.inboundSuggestions,
+    pageContent
   });
 
   return (

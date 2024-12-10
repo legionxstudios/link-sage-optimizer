@@ -6,6 +6,7 @@ interface LinkSuggestion {
   sourceUrl: string;
   targetUrl: string;
   suggestedAnchorText: string;
+  matchType: string;
   relevanceScore: number;
   context: string;
 }
@@ -15,6 +16,8 @@ interface LinkSuggestionsProps {
 }
 
 export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
+  console.log("Rendering suggestions:", suggestions);
+
   const getRelevanceColor = (score: number) => {
     if (score >= 0.9) return "text-green-600";
     if (score >= 0.7) return "text-yellow-600";
@@ -28,13 +31,6 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
     } catch (e) {
       return url;
     }
-  };
-
-  const getAnchorTextType = (suggestion: LinkSuggestion) => {
-    const score = suggestion.relevanceScore;
-    if (score >= 0.9) return "Exact Match";
-    if (score >= 0.7) return "Phrase Match";
-    return "LSI Match";
   };
 
   return (
@@ -66,7 +62,7 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
                 <Badge variant="outline">{suggestion.suggestedAnchorText}</Badge>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{getAnchorTextType(suggestion)}</Badge>
+                <Badge variant="secondary">{suggestion.matchType}</Badge>
               </TableCell>
               <TableCell>
                 <span className={getRelevanceColor(suggestion.relevanceScore)}>
