@@ -27,7 +27,13 @@ serve(async (req) => {
     try {
       parsedUrl = new URL(url);
     } catch (e) {
-      throw new Error('Invalid URL provided');
+      return new Response(
+        JSON.stringify({ error: 'Invalid URL provided' }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const supabase = createClient(
@@ -51,7 +57,13 @@ serve(async (req) => {
 
     if (websiteError) {
       console.error('Website upsert error:', websiteError);
-      throw websiteError;
+      return new Response(
+        JSON.stringify({ error: 'Failed to create website record' }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
     console.log(`Website record created/updated: ${website.id}`);
 
@@ -127,8 +139,8 @@ serve(async (req) => {
               .from('links')
               .upsert({
                 source_page_id: page.id,
-                anchor_text: link.textContent,
-                context: link.parentElement?.textContent,
+                anchor_text: link.textContent?.trim(),
+                context: link.parentElement?.textContent?.trim(),
                 is_internal: isInternal,
                 url: absoluteUrl
               })
