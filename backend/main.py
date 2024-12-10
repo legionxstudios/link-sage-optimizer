@@ -36,16 +36,18 @@ class LinkSuggestion(BaseModel):
     sourceUrl: str
     targetUrl: str
     suggestedAnchorText: str
+    matchType: str
     relevanceScore: float
     context: str
 
 class AnalysisResponse(BaseModel):
     pageContents: List[PageContent]
-    suggestions: List[LinkSuggestion]
+    outboundSuggestions: List[LinkSuggestion]
+    inboundSuggestions: List[LinkSuggestion]
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_page(request: AnalysisRequest):
-    """Analyze a webpage and generate internal linking suggestions."""
+    """Analyze a webpage and generate both inbound and outbound linking suggestions."""
     try:
         # Fetch and extract content
         async with httpx.AsyncClient() as client:
@@ -59,9 +61,21 @@ async def analyze_page(request: AnalysisRequest):
         main_keywords = extract_keywords(extracted_data['content'])
         logger.info(f"Extracted keywords: {main_keywords}")
         
-        # Generate suggestions
-        suggestions = find_keyword_contexts(extracted_data['content'], main_keywords)
-        logger.info(f"Generated {len(suggestions)} suggestions")
+        # Generate outbound suggestions (links to other pages)
+        outbound_suggestions = find_keyword_contexts(
+            extracted_data['content'], 
+            main_keywords,
+            is_outbound=True
+        )
+        logger.info(f"Generated {len(outbound_suggestions)} outbound suggestions")
+        
+        # Generate inbound suggestions (links from other pages)
+        inbound_suggestions = find_keyword_contexts(
+            extracted_data['content'],
+            main_keywords,
+            is_outbound=False
+        )
+        logger.info(f"Generated {len(inbound_suggestions)} inbound suggestions")
         
         # Create page content object
         page_content = PageContent(
@@ -73,7 +87,8 @@ async def analyze_page(request: AnalysisRequest):
         
         return AnalysisResponse(
             pageContents=[page_content],
-            suggestions=suggestions
+            outboundSuggestions=outbound_suggestions,
+            inboundSuggestions=inbound_suggestions
         )
     except Exception as e:
         logger.error(f"Error in analysis: {str(e)}")
