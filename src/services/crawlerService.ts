@@ -20,57 +20,27 @@ interface AnalysisResponse {
   suggestions: LinkSuggestion[];
 }
 
+const API_URL = "http://localhost:8000";
+
 export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
-    // Initialize the text classification pipeline
-    const classifier = await pipeline(
-      "text-classification",
-      "facebook/bart-large-mnli",
-      { device: "webgpu" }
-    );
-
-    // For now, return mock data until the crawler is implemented
-    const mockPageContents: PageContent[] = [
-      {
-        url: `${url}/about`,
-        title: "About Us",
-        content: "Company history and mission statement...",
-        mainKeywords: ["company", "history", "mission"],
+    const response = await fetch(`${API_URL}/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      {
-        url: `${url}/services`,
-        title: "Our Services",
-        content: "Professional services offered...",
-        mainKeywords: ["services", "solutions", "offerings"],
-      },
-    ];
+      body: JSON.stringify({ url }),
+    });
 
-    const mockSuggestions: LinkSuggestion[] = [
-      {
-        sourceUrl: `${url}/about`,
-        targetUrl: url,
-        suggestedAnchorText: "comprehensive solutions",
-        relevanceScore: 0.85,
-        context: "Learn more about our comprehensive solutions for your business needs.",
-      },
-      {
-        sourceUrl: `${url}/services`,
-        targetUrl: url,
-        suggestedAnchorText: "expert consulting services",
-        relevanceScore: 0.92,
-        context: "Our expert consulting services help businesses achieve their goals.",
-      },
-    ];
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    return {
-      pageContents: mockPageContents,
-      suggestions: mockSuggestions,
-    };
+    const data = await response.json();
+    console.log("Analysis results:", data);
+    return data;
   } catch (error) {
     console.error("Error in page analysis:", error);
     throw error;
