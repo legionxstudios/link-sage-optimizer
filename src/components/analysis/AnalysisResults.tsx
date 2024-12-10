@@ -6,17 +6,19 @@ import { LinkSuggestions } from "./LinkSuggestions";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+interface PageContent {
+  url: string;
+  title: string;
+  content: string;
+  mainKeywords: string[];
+  internalLinksCount?: number;
+  externalLinksCount?: number;
+}
+
 interface AnalysisResult {
   url: string;
   status: "analyzing" | "complete" | "error";
-  pageContents?: Array<{
-    url: string;
-    title: string;
-    content: string;
-    mainKeywords: string[];
-    internalLinksCount?: number;
-    externalLinksCount?: number;
-  }>;
+  pageContents?: Array<PageContent>;
   outboundSuggestions?: Array<any>;
   inboundSuggestions?: Array<any>;
   linkScore?: number;
@@ -29,10 +31,18 @@ interface AnalysisResultsProps {
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
   console.log("Raw analysis results:", results);
 
-  // Add null checks and default values
-  const pageContent = results.pageContents?.[0] || {};
-  const internalLinks = pageContent?.internalLinksCount || 0;
-  const externalLinks = pageContent?.externalLinksCount || 0;
+  // Add null checks and default values with proper typing
+  const pageContent: PageContent = results.pageContents?.[0] || {
+    url: '',
+    title: '',
+    content: '',
+    mainKeywords: [],
+    internalLinksCount: 0,
+    externalLinksCount: 0
+  };
+  
+  const internalLinks = pageContent.internalLinksCount || 0;
+  const externalLinks = pageContent.externalLinksCount || 0;
   const totalOutbound = internalLinks + externalLinks;
   const totalInbound = results.inboundSuggestions?.length || 0;
   const linkScore = results.linkScore || 0;
