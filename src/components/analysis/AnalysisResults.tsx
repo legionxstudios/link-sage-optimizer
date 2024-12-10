@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { BarChart3, Link2, AlertTriangle } from "lucide-react";
+import { ArrowDown, ArrowUp, Star } from "lucide-react";
 import { AnalysisMetricCard } from "./AnalysisMetricCard";
 import { PageIssuesList } from "./PageIssuesList";
 import { LinkSuggestions } from "./LinkSuggestions";
@@ -8,8 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface AnalysisResult {
   url: string;
-  totalLinks: number;
-  issues: number;
   status: "analyzing" | "complete" | "error";
   suggestions: Array<{
     sourceUrl: string;
@@ -17,31 +15,31 @@ interface AnalysisResult {
     suggestedAnchorText: string;
     relevanceScore: number;
     context: string;
+    matchType?: string;
   }>;
+  outboundSuggestions?: Array<any>;
+  inboundSuggestions?: Array<any>;
 }
 
 interface AnalysisResultsProps {
   results: AnalysisResult;
 }
 
+const calculateLinkScore = (inboundCount: number): number => {
+  // Base score calculation:
+  // 0-5 links: 1-2 stars
+  // 6-15 links: 3-4 stars
+  // 16+ links: 5 stars
+  if (inboundCount === 0) return 0;
+  if (inboundCount <= 5) return Math.max(1, Math.ceil(inboundCount / 3));
+  if (inboundCount <= 15) return Math.min(4, Math.ceil(inboundCount / 4));
+  return 5;
+};
+
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
-  // Simulated page issues for demonstration
-  const pageIssues = [
-    {
-      url: `${results.url}/blog`,
-      issueType: "Missing Internal Links",
-      description: "This page has relevant content but lacks proper internal linking",
-      impact: "High" as const,
-      suggestedFix: "Add internal links to related product pages and category pages",
-    },
-    {
-      url: `${results.url}/products`,
-      issueType: "Cannibalized Links",
-      description: "Multiple pages are using the same anchor text for different destinations",
-      impact: "Medium" as const,
-      suggestedFix: "Diversify anchor text to better describe each linked page's content",
-    },
-  ];
+  const outboundCount = results.outboundSuggestions?.length || 0;
+  const inboundCount = results.inboundSuggestions?.length || 0;
+  const linkScore = calculateLinkScore(inboundCount);
 
   return (
     <motion.div
@@ -61,28 +59,23 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <AnalysisMetricCard
-              icon={Link2}
-              title="Total Links"
-              value={results.totalLinks}
-              tooltip="The total number of internal links found on your website"
+              icon={ArrowDown}
+              title="Links To"
+              value={outboundCount}
+              tooltip="Number of suggested outbound links from this page"
             />
             <AnalysisMetricCard
-              icon={AlertTriangle}
-              title="Issues Found"
-              value={results.issues}
-              tooltip="Number of potential SEO issues detected in your internal linking structure"
+              icon={ArrowUp}
+              title="Links From"
+              value={inboundCount}
+              tooltip="Number of suggested inbound links to this page"
             />
             <AnalysisMetricCard
-              icon={BarChart3}
-              title="Health Score"
-              value={`${Math.max(0, 100 - results.issues * 10)}%`}
-              tooltip="Overall health score of your internal linking structure (100% is optimal)"
+              icon={Star}
+              title="Link Score"
+              value={`${linkScore}/5`}
+              tooltip="Score based on the number of inbound links (higher is better)"
             />
-          </div>
-
-          <div className="space-y-4">
-            <h4 className="text-lg font-semibold">Pages Requiring Attention</h4>
-            <PageIssuesList issues={pageIssues} />
           </div>
         </div>
       </Card>
@@ -102,8 +95,8 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
               <p className="text-sm text-muted-foreground">
                 Suggested pages to link to from your analyzed content, based on contextual relevance.
               </p>
-              {results.suggestions && results.suggestions.length > 0 ? (
-                <LinkSuggestions suggestions={results.suggestions} />
+              {results.outboundSuggestions && results.outboundSuggestions.length > 0 ? (
+                <LinkSuggestions suggestions={results.outboundSuggestions} />
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   No outbound link suggestions found for this content.
@@ -117,9 +110,13 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
               <p className="text-sm text-muted-foreground">
                 Pages that should link to your analyzed content, with diversified anchor text suggestions.
               </p>
-              <div className="text-center py-8 text-muted-foreground">
-                No inbound link suggestions available yet.
-              </div>
+              {results.inboundSuggestions && results.inboundSuggestions.length > 0 ? (
+                <LinkSuggestions suggestions={results.inboundSuggestions} />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No inbound link suggestions available yet.
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>
