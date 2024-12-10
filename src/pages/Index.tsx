@@ -5,18 +5,12 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { AnalysisResults } from "@/components/analysis/AnalysisResults";
-
-interface AnalysisResult {
-  url: string;
-  totalLinks: number;
-  issues: number;
-  status: "analyzing" | "complete" | "error";
-}
+import { analyzePage } from "@/services/crawlerService";
 
 const Index = () => {
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [results, setResults] = useState<AnalysisResult | null>(null);
+  const [results, setResults] = useState<any>(null);
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,14 +23,14 @@ const Index = () => {
       setIsAnalyzing(true);
       console.log("Starting analysis for:", url);
       
-      // Simulate analysis for now
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const analysisResults = await analyzePage(url);
       
       setResults({
         url,
         totalLinks: Math.floor(Math.random() * 100),
         issues: Math.floor(Math.random() * 10),
-        status: "complete"
+        status: "complete",
+        suggestions: analysisResults.suggestions
       });
       
       toast.success("Analysis complete!");

@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { BarChart3, Link2, AlertTriangle } from "lucide-react";
 import { AnalysisMetricCard } from "./AnalysisMetricCard";
 import { PageIssuesList } from "./PageIssuesList";
+import { LinkSuggestions } from "./LinkSuggestions";
 import { motion } from "framer-motion";
 
 interface AnalysisResult {
@@ -9,6 +10,13 @@ interface AnalysisResult {
   totalLinks: number;
   issues: number;
   status: "analyzing" | "complete" | "error";
+  suggestions: Array<{
+    sourceUrl: string;
+    targetUrl: string;
+    suggestedAnchorText: string;
+    relevanceScore: number;
+    context: string;
+  }>;
 }
 
 interface AnalysisResultsProps {
@@ -77,6 +85,10 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
           </div>
         </div>
       </Card>
+
+      {results.suggestions && results.suggestions.length > 0 && (
+        <LinkSuggestions suggestions={results.suggestions} />
+      )}
     </motion.div>
   );
 };
