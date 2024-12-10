@@ -9,13 +9,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 interface AnalysisResult {
   url: string;
   status: "analyzing" | "complete" | "error";
-  pageContents: Array<{
-    internalLinksCount: number;
-    externalLinksCount: number;
+  pageContents?: Array<{
+    internalLinksCount?: number;
+    externalLinksCount?: number;
   }>;
   outboundSuggestions?: Array<any>;
   inboundSuggestions?: Array<any>;
-  linkScore: number;
+  linkScore?: number;
 }
 
 interface AnalysisResultsProps {
@@ -23,10 +23,18 @@ interface AnalysisResultsProps {
 }
 
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
-  const pageContent = results.pageContents[0];
-  const totalOutbound = pageContent?.internalLinksCount + pageContent?.externalLinksCount || 0;
+  // Add null checks and default values
+  const pageContent = results.pageContents?.[0] || {};
+  const totalOutbound = (pageContent?.internalLinksCount || 0) + (pageContent?.externalLinksCount || 0);
   const totalInbound = results.inboundSuggestions?.length || 0;
   const linkScore = results.linkScore || 0;
+
+  console.log("Analysis results:", {
+    pageContent,
+    totalOutbound,
+    totalInbound,
+    linkScore
+  });
 
   return (
     <motion.div
