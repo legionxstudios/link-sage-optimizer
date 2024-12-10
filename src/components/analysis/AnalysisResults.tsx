@@ -28,9 +28,13 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
   const totalInbound = results.inboundSuggestions?.length || 0;
   const linkScore = results.linkScore || 0;
 
+  // Ensure suggestions are properly initialized
+  const outboundSuggestions = Array.isArray(results.outboundSuggestions) ? results.outboundSuggestions : [];
+  const inboundSuggestions = Array.isArray(results.inboundSuggestions) ? results.inboundSuggestions : [];
+
   console.log("Processing suggestions:", {
-    outbound: results.outboundSuggestions,
-    inbound: results.inboundSuggestions,
+    outbound: outboundSuggestions,
+    inbound: inboundSuggestions,
     pageContent
   });
 
@@ -88,8 +92,8 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
               <p className="text-sm text-muted-foreground">
                 Suggested pages to link to from your analyzed content, based on contextual relevance.
               </p>
-              {results.outboundSuggestions && results.outboundSuggestions.length > 0 ? (
-                <LinkSuggestions suggestions={results.outboundSuggestions} />
+              {outboundSuggestions && outboundSuggestions.length > 0 ? (
+                <LinkSuggestions suggestions={outboundSuggestions} />
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   No outbound link suggestions found for this content.
@@ -103,8 +107,8 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
               <p className="text-sm text-muted-foreground">
                 Pages that should link to your analyzed content, with diversified anchor text suggestions.
               </p>
-              {results.inboundSuggestions && results.inboundSuggestions.length > 0 ? (
-                <LinkSuggestions suggestions={results.inboundSuggestions} />
+              {inboundSuggestions && inboundSuggestions.length > 0 ? (
+                <LinkSuggestions suggestions={inboundSuggestions} />
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   No inbound link suggestions available yet.

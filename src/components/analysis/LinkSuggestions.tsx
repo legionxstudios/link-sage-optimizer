@@ -18,6 +18,11 @@ interface LinkSuggestionsProps {
 export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
   console.log("Rendering suggestions:", suggestions);
 
+  if (!Array.isArray(suggestions)) {
+    console.error("Invalid suggestions data:", suggestions);
+    return null;
+  }
+
   const getRelevanceColor = (score: number) => {
     if (score >= 0.9) return "text-green-600";
     if (score >= 0.7) return "text-yellow-600";
@@ -29,6 +34,7 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
       const urlObj = new URL(url);
       return `${urlObj.pathname}${urlObj.search}`;
     } catch (e) {
+      console.error("Invalid URL:", url, e);
       return url;
     }
   };
@@ -62,7 +68,7 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
                 <Badge variant="outline">{suggestion.suggestedAnchorText}</Badge>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{suggestion.matchType}</Badge>
+                <Badge variant="secondary">{suggestion.matchType || 'Semantic Match'}</Badge>
               </TableCell>
               <TableCell>
                 <span className={getRelevanceColor(suggestion.relevanceScore)}>

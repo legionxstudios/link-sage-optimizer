@@ -38,8 +38,18 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       throw new Error(error.message);
     }
 
-    console.log("Analysis results:", data);
-    return data;
+    console.log("Raw API response:", data);
+
+    // Ensure the response matches our expected format
+    const response: AnalysisResponse = {
+      pageContents: data.pageContents || [],
+      outboundSuggestions: Array.isArray(data.outboundSuggestions) ? data.outboundSuggestions : [],
+      inboundSuggestions: Array.isArray(data.inboundSuggestions) ? data.inboundSuggestions : [],
+      linkScore: data.linkScore || 0
+    };
+
+    console.log("Processed analysis results:", response);
+    return response;
   } catch (error) {
     console.error("Error in page analysis:", error);
     throw error;
