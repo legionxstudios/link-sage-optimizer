@@ -73,12 +73,14 @@ async def analyze_page(request: AnalysisRequest):
         
         # Fetch and extract content
         async with httpx.AsyncClient() as client:
-            response = await client.get(str(request.url))
+            logger.info(f"Fetching content from URL: {request.url}")
+            response = await client.get(str(request.url), follow_redirects=True)
             response.raise_for_status()
+            logger.info(f"Successfully fetched content, status code: {response.status_code}")
         
         # Extract content and analyze links
         extracted_data = extract_content(response.text, str(request.url))
-        logger.info(f"Extracted data: {extracted_data}")
+        logger.info(f"Content extraction completed. Title: {extracted_data['title']}")
         
         # Extract keywords
         main_keywords = extract_keywords(extracted_data['content'])
