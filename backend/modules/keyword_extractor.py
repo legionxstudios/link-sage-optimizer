@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 import re
 import logging
 from collections import Counter
@@ -19,83 +19,106 @@ except LookupError:
     nltk.download('stopwords')
     nltk.download('averaged_perceptron_tagger')
 
-def clean_text(text: str) -> str:
-    """Clean text by removing special characters and extra whitespace."""
-    text = re.sub(r'[^\w\s]', ' ', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text.lower().strip()
+class KeywordExtractor:
+    def __init__(self, content: str):
+        self.content = content
+        self.stop_words = set(stopwords.words('english'))
+        self.sentences = sent_tokenize(content)
 
-def extract_keywords(content: str) -> List[str]:
-    """Extract meaningful keyword phrases from content."""
-    try:
-        # Clean the text
-        cleaned_content = clean_text(content)
+    def extract_keywords(self) -> Dict[str, List[str]]:
+        """Extract keywords with different match types."""
+        # Get all potential keyword phrases
+        keyword_candidates = self._extract_keyword_candidates()
         
-        # Tokenize into sentences first
-        sentences = sent_tokenize(cleaned_content)
+        # Score and categorize keywords
+        scored_keywords = self._score_keywords(keyword_candidates)
         
-        # Process each sentence
-        keyword_candidates = []
-        stop_words = set(stopwords.words('english'))
+        # Split into match types (70-20-10 distribution)
+        exact_matches = []
+        broad_matches = []
+        related_matches = []
         
-        for sentence in sentences:
+        for keyword, score in scored_keywords:
+            if len(exact_matches) < int(len(scored_keywords) * 0.7):
+                exact_matches.append(keyword)
+            elif len(broad_matches) < int(len(scored_keywords) * 0.2):
+                broad_matches.append(keyword)
+            elif len(related_matches) < int(len(scored_keywords) * 0.1):
+                related_matches.append(keyword)
+                
+        return {
+            'exact_match': exact_matches,
+            'broad_match': broad_matches,
+            'related_match': related_matches
+        }
+
+    def _extract_keyword_candidates(self) -> List[str]:
+        """Extract potential keyword phrases from content."""
+        candidates = []
+        
+        for sentence in self.sentences:
             # Tokenize and tag parts of speech
             tokens = word_tokenize(sentence)
             pos_tags = pos_tag(tokens)
             
-            # Generate n-grams (2-4 words)
-            for n in range(2, 5):
+            # Generate n-grams (1-3 words)
+            for n in range(1, 4):
                 n_grams = list(ngrams(pos_tags, n))
                 
                 for gram in n_grams:
                     words = [word.lower() for word, tag in gram]
                     tags = [tag for _, tag in gram]
                     
-                    # Check if the phrase is a good candidate:
-                    # 1. Contains at least one noun (NN*)
-                    # 2. Doesn't start or end with stop words
-                    # 3. Not all words are stop words
-                    if (any(tag.startswith('NN') for tag in tags) and
-                        words[0] not in stop_words and
-                        words[-1] not in stop_words and
-                        any(word not in stop_words for word in words)):
-                        
+                    # Check if phrase is a good candidate
+                    if self._is_valid_phrase(words, tags):
                         phrase = ' '.join(words)
-                        if len(phrase) > 5:  # Avoid very short phrases
-                            keyword_candidates.append(phrase)
+                        if len(phrase) > 3:  # Avoid very short phrases
+                            candidates.append(phrase)
         
-        # Count frequency and calculate scores
-        phrase_counts = Counter(keyword_candidates)
+        return candidates
+
+    def _is_valid_phrase(self, words: List[str], tags: List[str]) -> bool:
+        """Check if a phrase is valid for keyword consideration."""
+        return (
+            # Contains at least one noun
+            any(tag.startswith('NN') for tag in tags) and
+            # Doesn't start or end with stop words
+            words[0] not in self.stop_words and
+            words[-1] not in self.stop_words and
+            # Not all words are stop words
+            any(word not in self.stop_words for word in words)
+        )
+
+    def _score_keywords(self, candidates: List[str]) -> List[tuple]:
+        """Score keyword candidates based on various factors."""
+        # Count frequency
+        counts = Counter(candidates)
         
-        # Score phrases based on:
-        # 1. Frequency
-        # 2. Length (favor longer phrases)
-        # 3. Position in text (earlier phrases might be more important)
+        # Calculate scores
         scored_phrases = []
-        for phrase, count in phrase_counts.items():
+        for phrase, count in counts.items():
             # Base score from frequency
             score = count
             
-            # Boost score for longer phrases
-            words = phrase.split()
-            length_boost = len(words) / 2  # Longer phrases get higher boost
-            score *= length_boost
-            
-            # Boost for phrases that appear in first third of the content
-            first_occurrence = cleaned_content.find(phrase)
-            if first_occurrence != -1 and first_occurrence < len(cleaned_content) / 3:
+            # Boost score for phrases that appear in title-like positions
+            first_occurrence = self.content.lower().find(phrase)
+            if first_occurrence < len(self.content) / 3:
                 score *= 1.5
-                
+            
+            # Boost for noun phrases
+            if len(phrase.split()) > 1:
+                score *= 1.2
+            
             scored_phrases.append((phrase, score))
         
-        # Sort by score and take top 15
-        keywords = [
-            phrase for phrase, _ 
-            in sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:15]
-        ]
-        
-        logger.info(f"Extracted keywords: {keywords}")
-        return keywords
+        # Sort by score and take top 20
+        return sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:20]
+
+def extract_keywords(content: str) -> Dict[str, List[str]]:
+    """Main function to extract keywords from content."""
+    try:
+        extractor = KeywordExtractor(content)
+        return extractor.extract_keywords()
     except Exception as e:
         logger.error(f"Error extracting keywords: {str(e)}")
-        return []
+        raise
