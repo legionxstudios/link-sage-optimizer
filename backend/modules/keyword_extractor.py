@@ -1,46 +1,71 @@
-from transformers import pipeline
-import re
 from typing import List
+import re
 import logging
+from collections import Counter
+import nltk
+from nltk.util import ngrams
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
 
 logger = logging.getLogger(__name__)
 
-def extract_ngrams(text: str, n: int) -> List[str]:
-    """Extract n-gram phrases from text."""
-    words = text.lower().split()
-    ngrams = []
-    for i in range(len(words) - n + 1):
-        ngram = ' '.join(words[i:i + n])
-        if not re.match(r'^(the|a|an|and|or|but|in|on|at|to|for|of|with)\s', ngram):
-            ngrams.append(ngram)
-    return ngrams
+try:
+    nltk.data.find('tokenizers/punkt')
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('punkt')
+    nltk.download('stopwords')
+
+def clean_text(text: str) -> str:
+    """Clean text by removing special characters and extra whitespace."""
+    text = re.sub(r'[^\w\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.lower().strip()
 
 def extract_keywords(content: str) -> List[str]:
-    """Extract keywords using zero-shot classification and n-grams."""
+    """Extract meaningful keyword phrases from content."""
     try:
-        # Extract 2-gram and 3-gram phrases from the content
-        bigrams = extract_ngrams(content, 2)
-        trigrams = extract_ngrams(content, 3)
+        # Clean the text
+        cleaned_content = clean_text(content)
         
-        # Get the most frequent n-grams as candidate labels
-        candidate_keywords = list(set(bigrams + trigrams))[:20]  # Limit to top 20 candidates
+        # Tokenize
+        tokens = word_tokenize(cleaned_content)
+        stop_words = set(stopwords.words('english'))
         
-        # Initialize zero-shot classifier
-        classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
+        # Generate n-grams (2-4 words)
+        keyword_candidates = []
+        for n in range(2, 5):
+            n_grams = list(ngrams(tokens, n))
+            for gram in n_grams:
+                phrase = ' '.join(gram)
+                # Filter out phrases that:
+                # 1. Start or end with stop words
+                # 2. Contain only stop words
+                # 3. Are too short
+                words = phrase.split()
+                if (words[0] not in stop_words and 
+                    words[-1] not in stop_words and 
+                    any(word not in stop_words for word in words) and
+                    len(phrase) > 5):
+                    keyword_candidates.append(phrase)
         
-        # Split content into chunks if it's too long
-        max_length = 1024
-        content_chunks = [content[i:i + max_length] for i in range(0, len(content), max_length)]
+        # Count frequency of phrases
+        phrase_counts = Counter(keyword_candidates)
         
-        all_keywords = set()
-        for chunk in content_chunks:
-            result = classifier(chunk, candidate_keywords, multi_label=True)
-            # Filter keywords with high confidence
-            keywords = [label for label, score in zip(result['labels'], result['scores']) if score > 0.7]
-            all_keywords.update(keywords)
+        # Get the most common phrases (normalized by length)
+        scored_phrases = [
+            (phrase, count * len(phrase.split()))  # Favor longer phrases
+            for phrase, count in phrase_counts.items()
+        ]
         
-        logger.info(f"Extracted keywords: {all_keywords}")
-        return list(all_keywords)
+        # Sort by score and take top 10
+        keywords = [
+            phrase for phrase, score 
+            in sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:10]
+        ]
+        
+        logger.info(f"Extracted keywords: {keywords}")
+        return keywords
     except Exception as e:
         logger.error(f"Error extracting keywords: {str(e)}")
         return []

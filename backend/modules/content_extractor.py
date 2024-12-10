@@ -1,34 +1,71 @@
 from bs4 import BeautifulSoup
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+def clean_content(text: str) -> str:
+    """Clean extracted content."""
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text)
+    # Remove special characters but keep sentence structure
+    text = re.sub(r'[^\w\s.,!?-]', '', text)
+    return text.strip()
 
 def extract_content(response_text: str) -> dict:
     """Extract meaningful content from HTML."""
     try:
         soup = BeautifulSoup(response_text, 'html.parser')
         
-        # Remove navigation, header, footer, and other non-content elements
-        for element in soup.find_all(['nav', 'header', 'footer', 'aside', 'script', 'style']):
+        # Remove script, style, nav, and other non-content elements
+        for element in soup.find_all(['script', 'style', 'nav', 'header', 'footer', 'aside']):
             element.decompose()
         
         # Extract title
         title = soup.title.string if soup.title else ""
         
-        # Extract main content focusing on article content
+        # Try to find the main content area
         main_content = ""
-        content_tags = soup.find_all(['article', 'main', 'div'], class_=['content', 'main-content', 'post-content', 'entry-content'])
+        content_selectors = [
+            'article',
+            'main',
+            '[role="main"]',
+            '.post-content',
+            '.entry-content',
+            '.article-content',
+            '.content',
+            '#content'
+        ]
         
-        if content_tags:
-            main_content = " ".join([tag.get_text(strip=True) for tag in content_tags])
-        else:
-            # Fallback to paragraph text if no main content areas found
+        # Try each selector until we find content
+        for selector in content_selectors:
+            content_area = soup.select_one(selector)
+            if content_area:
+                # Extract all paragraphs from the content area
+                paragraphs = []
+                for p in content_area.find_all('p'):
+                    text = p.get_text(strip=True)
+                    if len(text) > 30:  # Only keep substantial paragraphs
+                        paragraphs.append(text)
+                
+                if paragraphs:
+                    main_content = ' '.join(paragraphs)
+                    break
+        
+        # Fallback to all paragraphs if no content area found
+        if not main_content:
             paragraphs = []
             for p in soup.find_all('p'):
                 text = p.get_text(strip=True)
-                if len(text) > 50:  # Filter out short paragraphs
+                if len(text) > 30:
                     paragraphs.append(text)
-            main_content = " ".join(paragraphs)
+            main_content = ' '.join(paragraphs)
+        
+        # Clean the content
+        main_content = clean_content(main_content)
+        
+        logger.info(f"Extracted content length: {len(main_content)} characters")
+        logger.info(f"Title: {title}")
         
         return {
             'title': title,
