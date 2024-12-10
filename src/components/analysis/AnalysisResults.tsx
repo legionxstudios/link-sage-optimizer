@@ -10,6 +10,10 @@ interface AnalysisResult {
   url: string;
   status: "analyzing" | "complete" | "error";
   pageContents?: Array<{
+    url: string;
+    title: string;
+    content: string;
+    mainKeywords: string[];
     internalLinksCount?: number;
     externalLinksCount?: number;
   }>;
@@ -23,14 +27,20 @@ interface AnalysisResultsProps {
 }
 
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
+  console.log("Raw analysis results:", results);
+
   // Add null checks and default values
   const pageContent = results.pageContents?.[0] || {};
-  const totalOutbound = (pageContent?.internalLinksCount || 0) + (pageContent?.externalLinksCount || 0);
+  const internalLinks = pageContent?.internalLinksCount || 0;
+  const externalLinks = pageContent?.externalLinksCount || 0;
+  const totalOutbound = internalLinks + externalLinks;
   const totalInbound = results.inboundSuggestions?.length || 0;
   const linkScore = results.linkScore || 0;
 
-  console.log("Analysis results:", {
+  console.log("Processed analysis data:", {
     pageContent,
+    internalLinks,
+    externalLinks,
     totalOutbound,
     totalInbound,
     linkScore
