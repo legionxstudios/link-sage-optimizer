@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { pipeline } from 'https://esm.sh/@huggingface/transformers'
 import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -47,40 +48,65 @@ serve(async (req) => {
       }))
       .filter(link => link.href && link.href.startsWith('/') || link.href.startsWith(baseUrl));
 
-    // Initialize the zero-shot classification pipeline
-    const classifier = await pipeline('zero-shot-classification', 'facebook/bart-large-mnli');
-
-    // Analyze content for main keywords
-    const candidateKeywords = [
-      "technology", "business", "health", "education", "entertainment",
-      "sports", "science", "politics", "lifestyle", "travel"
-    ];
-
-    const keywordResults = await classifier(content, candidateKeywords, {
-      multi_label: true
+    // Use OpenAI to analyze content and generate keywords
+    const keywordResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an SEO expert. Extract the main topics/keywords from the given content. Return only an array of keywords, nothing else.'
+          },
+          {
+            role: 'user',
+            content: content.substring(0, 1000) // First 1000 chars for context
+          }
+        ],
+      }),
     });
 
-    // Filter keywords with confidence > 0.3
-    const mainKeywords = keywordResults.labels.filter((_, i) => 
-      keywordResults.scores[i] > 0.3
-    );
+    const keywordData = await keywordResponse.json();
+    const mainKeywords = JSON.parse(keywordData.choices[0].message.content);
 
-    // Generate link suggestions based on content analysis
+    // Analyze links and generate suggestions
     const suggestions = await Promise.all(
       links.map(async (link) => {
-        // Analyze relevance between link text and surrounding content
-        const relevanceScore = await classifier(
-          link.text || '',
-          [content.substring(0, 200)], // Use beginning of content as context
-          { multi_label: false }
-        ).then(result => result.scores[0]);
+        // Use OpenAI to analyze relevance
+        const relevanceResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are an SEO expert. Rate the relevance between the link text and the surrounding content on a scale of 0 to 1. Return only the number, nothing else.'
+              },
+              {
+                role: 'user',
+                content: `Link text: "${link.text}"\nContent context: "${content.substring(0, 200)}"`
+              }
+            ],
+          }),
+        });
+
+        const relevanceData = await relevanceResponse.json();
+        const relevanceScore = parseFloat(relevanceData.choices[0].message.content);
 
         return {
           sourceUrl: link.href?.startsWith('/') ? `${baseUrl}${link.href}` : link.href,
           targetUrl: url,
           suggestedAnchorText: link.text || '',
           relevanceScore,
-          context: content.substring(0, 200) // Provide some context from the content
+          context: content.substring(0, 200)
         };
       })
     );
