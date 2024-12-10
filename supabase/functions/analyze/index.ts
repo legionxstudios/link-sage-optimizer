@@ -7,20 +7,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const HF_API_KEY = Deno.env.get('HUGGING_FACE_API_KEY');
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { url } = await req.json()
-    console.log('Analyzing URL:', url)
+    const { url } = await req.json();
+    console.log('Analyzing URL:', url);
 
     if (!url) {
-      throw new Error('URL is required')
+      throw new Error('URL is required');
     }
 
     // Fetch and parse the webpage
@@ -48,58 +48,63 @@ serve(async (req) => {
       }))
       .filter(link => link.href && link.href.startsWith('/') || link.href.startsWith(baseUrl));
 
-    // Use OpenAI to analyze content and generate keywords
-    const keywordResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an SEO expert. Extract the main topics/keywords from the given content. Return only an array of keywords, nothing else.'
-          },
-          {
-            role: 'user',
-            content: content.substring(0, 1000) // First 1000 chars for context
+    // Use Hugging Face for zero-shot classification to get main keywords
+    const keywordResponse = await fetch(
+      "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${HF_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inputs: content.substring(0, 1000),
+          parameters: {
+            candidate_labels: [
+              "technology", "business", "health", "education", 
+              "entertainment", "sports", "science", "politics", 
+              "lifestyle", "travel"
+            ],
+            multi_label: true
           }
-        ],
-      }),
-    });
+        }),
+      }
+    );
 
     const keywordData = await keywordResponse.json();
-    const mainKeywords = JSON.parse(keywordData.choices[0].message.content);
+    console.log('Keyword analysis response:', keywordData);
+    
+    // Filter labels with scores > 0.3
+    const mainKeywords = keywordData.labels.filter((_, index) => 
+      keywordData.scores[index] > 0.3
+    );
 
     // Analyze links and generate suggestions
     const suggestions = await Promise.all(
       links.map(async (link) => {
-        // Use OpenAI to analyze relevance
-        const relevanceResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openAIApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are an SEO expert. Rate the relevance between the link text and the surrounding content on a scale of 0 to 1. Return only the number, nothing else.'
-              },
-              {
-                role: 'user',
-                content: `Link text: "${link.text}"\nContent context: "${content.substring(0, 200)}"`
+        // Use Hugging Face to analyze relevance
+        const relevanceResponse = await fetch(
+          "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${HF_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              inputs: link.text || '',
+              parameters: {
+                candidate_labels: [content.substring(0, 200)],
+                multi_label: false
               }
-            ],
-          }),
-        });
+            }),
+          }
+        );
 
         const relevanceData = await relevanceResponse.json();
-        const relevanceScore = parseFloat(relevanceData.choices[0].message.content);
+        console.log('Relevance analysis for link:', link.text, relevanceData);
+        
+        const relevanceScore = relevanceData.scores[0];
 
         return {
           sourceUrl: link.href?.startsWith('/') ? `${baseUrl}${link.href}` : link.href,
