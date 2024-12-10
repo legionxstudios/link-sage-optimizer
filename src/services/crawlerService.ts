@@ -1,5 +1,3 @@
-import { pipeline } from "@huggingface/transformers";
-
 interface PageContent {
   url: string;
   title: string;
@@ -35,7 +33,9 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.text();
+      console.error("Server error:", errorData);
+      throw new Error(`Server error: ${response.status} ${errorData}`);
     }
 
     const data = await response.json();

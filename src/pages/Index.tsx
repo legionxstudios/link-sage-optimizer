@@ -19,24 +19,33 @@ const Index = () => {
       return;
     }
 
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch (e) {
+      toast.error("Please enter a valid URL (including http:// or https://)");
+      return;
+    }
+
     try {
       setIsAnalyzing(true);
+      toast.info("Starting analysis...");
       console.log("Starting analysis for:", url);
       
       const analysisResults = await analyzePage(url);
       
       setResults({
         url,
-        totalLinks: analysisResults.pageContents.length,
-        issues: Math.floor(Math.random() * 10), // This will come from the Python backend
+        totalLinks: analysisResults.suggestions.length,
+        issues: Math.floor(Math.random() * 10), // This will be replaced with actual issues count
         status: "complete",
         suggestions: analysisResults.suggestions
       });
       
       toast.success("Analysis complete!");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Analysis failed:", error);
-      toast.error("Failed to analyze URL. Please try again.");
+      toast.error(error.message || "Failed to analyze URL. Please try again.");
       setResults(null);
     } finally {
       setIsAnalyzing(false);
@@ -69,7 +78,7 @@ const Index = () => {
             <div className="flex flex-col sm:flex-row gap-4">
               <Input
                 type="url"
-                placeholder="Enter your website URL"
+                placeholder="Enter your website URL (e.g., https://example.com)"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1"
