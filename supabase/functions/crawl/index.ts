@@ -45,27 +45,70 @@ serve(async (req) => {
     const domain = parsedUrl.hostname;
     console.log(`Extracted domain: ${domain}`);
 
-    // Create or update website record
-    const { data: website, error: websiteError } = await supabase
+    // First check if website already exists
+    const { data: existingWebsite, error: fetchError } = await supabase
       .from('websites')
-      .upsert({ 
-        domain, 
-        last_crawled_at: new Date().toISOString() 
-      })
-      .select()
+      .select('id')
+      .eq('domain', domain)
       .single();
 
-    if (websiteError) {
-      console.error('Website upsert error:', websiteError);
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "not found" error
+      console.error('Error fetching website:', fetchError);
       return new Response(
-        JSON.stringify({ error: 'Failed to create website record' }),
+        JSON.stringify({ error: 'Failed to check existing website' }),
         { 
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
     }
-    console.log(`Website record created/updated: ${website.id}`);
+
+    let websiteId;
+    if (existingWebsite) {
+      websiteId = existingWebsite.id;
+      console.log(`Using existing website record: ${websiteId}`);
+      
+      // Update last_crawled_at
+      const { error: updateError } = await supabase
+        .from('websites')
+        .update({ last_crawled_at: new Date().toISOString() })
+        .eq('id', websiteId);
+
+      if (updateError) {
+        console.error('Error updating website:', updateError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to update website record' }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+    } else {
+      // Create new website record
+      const { data: newWebsite, error: insertError } = await supabase
+        .from('websites')
+        .insert({ 
+          domain,
+          last_crawled_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (insertError || !newWebsite) {
+        console.error('Error creating website:', insertError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to create website record', details: insertError }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
+      websiteId = newWebsite.id;
+      console.log(`Created new website record: ${websiteId}`);
+    }
 
     // Initialize crawl queue and visited set
     const toVisit = new Set([url]);
@@ -104,7 +147,7 @@ serve(async (req) => {
         const { data: page, error: pageError } = await supabase
           .from('pages')
           .upsert({
-            website_id: website.id,
+            website_id: websiteId,
             url: currentUrl,
             title,
             content: mainContent,
@@ -177,7 +220,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
-        status: 400,
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
