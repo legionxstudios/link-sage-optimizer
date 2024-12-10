@@ -5,14 +5,15 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { AnalysisResults } from "@/components/analysis/AnalysisResults";
-import { analyzePage, AnalysisResponse } from "@/services/crawlerService";
+import { analyzePage, crawlWebsite, AnalysisResponse } from "@/services/crawlerService";
 
 const Index = () => {
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCrawling, setIsCrawling] = useState(false);
   const [results, setResults] = useState<AnalysisResponse | null>(null);
 
-  const handleAnalyze = async (e: React.FormEvent) => {
+  const handleCrawlAndAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) {
       toast.error("Please enter a URL to analyze");
@@ -27,9 +28,16 @@ const Index = () => {
     }
 
     try {
+      setIsCrawling(true);
+      toast.info("Starting website crawl...");
+      console.log("Starting crawl for:", url);
+      
+      const crawlResult = await crawlWebsite(url);
+      console.log("Crawl completed:", crawlResult);
+      toast.success(`Crawl complete! Processed ${crawlResult.pagesProcessed} pages`);
+      
       setIsAnalyzing(true);
-      toast.info("Starting analysis...");
-      console.log("Starting analysis for:", url);
+      toast.info("Analyzing crawled content...");
       
       const analysisResults = await analyzePage(url);
       console.log("Analysis completed:", analysisResults);
@@ -37,10 +45,11 @@ const Index = () => {
       setResults(analysisResults);
       toast.success("Analysis complete!");
     } catch (error: any) {
-      console.error("Analysis failed:", error);
-      toast.error(error.message || "Failed to analyze URL. Please try again.");
+      console.error("Process failed:", error);
+      toast.error(error.message || "Failed to process URL. Please try again.");
       setResults(null);
     } finally {
+      setIsCrawling(false);
       setIsAnalyzing(false);
     }
   };
@@ -67,7 +76,7 @@ const Index = () => {
         </div>
 
         <Card className="p-6">
-          <form onSubmit={handleAnalyze} className="space-y-4">
+          <form onSubmit={handleCrawlAndAnalyze} className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <Input
                 type="url"
@@ -76,14 +85,19 @@ const Index = () => {
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1"
               />
-              <Button type="submit" disabled={isAnalyzing}>
-                {isAnalyzing ? (
+              <Button type="submit" disabled={isAnalyzing || isCrawling}>
+                {isCrawling ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Crawling...
+                  </div>
+                ) : isAnalyzing ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     Analyzing...
                   </div>
                 ) : (
-                  "Analyze Links"
+                  "Analyze Site"
                 )}
               </Button>
             </div>

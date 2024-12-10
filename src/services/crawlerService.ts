@@ -55,3 +55,24 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     throw error;
   }
 };
+
+export const crawlWebsite = async (url: string, maxPages: number = 50): Promise<{ success: boolean; pagesProcessed: number; domain: string }> => {
+  console.log("Starting website crawl for:", url);
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('crawl', {
+      body: { url, maxPages }
+    });
+
+    if (error) {
+      console.error("Crawl error:", error);
+      throw new Error(error.message);
+    }
+
+    console.log("Crawl completed:", data);
+    return data;
+  } catch (error) {
+    console.error("Error in website crawl:", error);
+    throw error;
+  }
+};

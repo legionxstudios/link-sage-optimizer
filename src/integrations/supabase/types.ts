@@ -9,6 +9,65 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      links: {
+        Row: {
+          anchor_text: string | null
+          context: string | null
+          created_at: string | null
+          id: string
+          is_internal: boolean | null
+          source_page_id: string | null
+          target_page_id: string | null
+        }
+        Insert: {
+          anchor_text?: string | null
+          context?: string | null
+          created_at?: string | null
+          id?: string
+          is_internal?: boolean | null
+          source_page_id?: string | null
+          target_page_id?: string | null
+        }
+        Update: {
+          anchor_text?: string | null
+          context?: string | null
+          created_at?: string | null
+          id?: string
+          is_internal?: boolean | null
+          source_page_id?: string | null
+          target_page_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "links_source_page_id_fkey"
+            columns: ["source_page_id"]
+            isOneToOne: false
+            referencedRelation: "page_link_stats"
+            referencedColumns: ["page_id"]
+          },
+          {
+            foreignKeyName: "links_source_page_id_fkey"
+            columns: ["source_page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "links_target_page_id_fkey"
+            columns: ["target_page_id"]
+            isOneToOne: false
+            referencedRelation: "page_link_stats"
+            referencedColumns: ["page_id"]
+          },
+          {
+            foreignKeyName: "links_target_page_id_fkey"
+            columns: ["target_page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       page_analysis: {
         Row: {
           content: string | null
@@ -48,9 +107,83 @@ export type Database = {
         }
         Relationships: []
       }
+      pages: {
+        Row: {
+          content: string | null
+          created_at: string | null
+          id: string
+          last_crawled_at: string | null
+          metadata: Json | null
+          title: string | null
+          url: string
+          website_id: string | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          last_crawled_at?: string | null
+          metadata?: Json | null
+          title?: string | null
+          url: string
+          website_id?: string | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          last_crawled_at?: string | null
+          metadata?: Json | null
+          title?: string | null
+          url?: string
+          website_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pages_website_id_fkey"
+            columns: ["website_id"]
+            isOneToOne: false
+            referencedRelation: "websites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      websites: {
+        Row: {
+          crawl_frequency: unknown | null
+          created_at: string | null
+          domain: string
+          id: string
+          last_crawled_at: string | null
+        }
+        Insert: {
+          crawl_frequency?: unknown | null
+          created_at?: string | null
+          domain: string
+          id?: string
+          last_crawled_at?: string | null
+        }
+        Update: {
+          crawl_frequency?: unknown | null
+          created_at?: string | null
+          domain?: string
+          id?: string
+          last_crawled_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      page_link_stats: {
+        Row: {
+          inbound_links_count: number | null
+          outbound_links_count: number | null
+          page_id: string | null
+          title: string | null
+          url: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
