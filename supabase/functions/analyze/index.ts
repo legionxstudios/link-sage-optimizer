@@ -24,6 +24,7 @@ serve(async (req) => {
 
     // Extract content from the webpage
     const { title, content, paragraphs, existingLinks } = await extractContent(url);
+    console.log('Extracted content length:', content.length);
     
     // Analyze keywords in the content
     const mainKeywords = await analyzeKeywords(content);
@@ -39,7 +40,7 @@ serve(async (req) => {
     
     console.log('Generated suggestions:', suggestions.length);
 
-    // Store analysis results
+    // Store analysis results - now storing full content
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -49,24 +50,36 @@ serve(async (req) => {
       .insert({
         url,
         title,
-        content: content.substring(0, 500),
+        content: content, // Store the full content without truncation
         main_keywords: mainKeywords,
-        suggestions
+        suggestions,
+        outbound_links_count: existingLinks.length,
+        inbound_links_count: 0, // This will be updated after crawling
+        link_score: 0 // This will be calculated after crawling
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database error:', error);
+      throw error;
+    }
+
+    console.log('Stored content length:', data.content.length);
 
     return new Response(
       JSON.stringify({
         pageContents: [{
           url,
           title,
-          content: content.substring(0, 500),
-          mainKeywords
+          content: content, // Return full content
+          mainKeywords,
+          internalLinksCount: existingLinks.length,
+          externalLinksCount: 0
         }],
-        suggestions
+        outboundSuggestions: suggestions.outbound || [],
+        inboundSuggestions: suggestions.inbound || [],
+        linkScore: 0
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
