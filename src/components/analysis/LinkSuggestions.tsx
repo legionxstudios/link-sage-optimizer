@@ -29,12 +29,21 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
     return "text-red-600";
   };
 
+  const formatUrl = (url: string) => {
+    try {
+      const urlObj = new URL(url);
+      return `${urlObj.pathname}${urlObj.search}`;
+    } catch (e) {
+      return url;
+    }
+  };
+
   return (
     <Card className="p-6">
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Link Suggestions</h3>
         <p className="text-sm text-muted-foreground">
-          AI-powered suggestions for internal linking opportunities
+          AI-powered suggestions for internal linking opportunities from your content
         </p>
         
         <Table>
@@ -52,10 +61,10 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
                 <TableCell className="max-w-[200px] truncate">
                   <Tooltip>
                     <TooltipTrigger className="cursor-help">
-                      {suggestion.sourceUrl}
+                      {formatUrl(suggestion.sourceUrl)}
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>This page should link to your target page</p>
+                      <p>Full URL: {suggestion.sourceUrl}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TableCell>

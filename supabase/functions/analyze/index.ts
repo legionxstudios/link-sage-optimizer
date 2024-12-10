@@ -10,7 +10,6 @@ const corsHeaders = {
 const HF_API_KEY = Deno.env.get('HUGGING_FACE_API_KEY');
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -23,7 +22,6 @@ serve(async (req) => {
       throw new Error('URL is required');
     }
 
-    // Fetch and parse the webpage
     const response = await fetch(url);
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -32,25 +30,46 @@ serve(async (req) => {
       throw new Error('Failed to parse webpage');
     }
 
-    // Extract title and content
     const title = doc.querySelector('title')?.textContent || '';
+    
+    // Get main content area
+    const mainContent = doc.querySelector('main, article, .content, .post-content, [role="main"]');
+    let contentLinks;
+    
+    if (mainContent) {
+      // If we found a main content area, get links only from there
+      contentLinks = Array.from(mainContent.querySelectorAll('a[href]'));
+    } else {
+      // Fallback: get all links from paragraphs (likely content, not navigation)
+      contentLinks = Array.from(doc.querySelectorAll('p a[href], article a[href]'));
+    }
+
+    const baseUrl = new URL(url).origin;
+    const links = contentLinks
+      .map(link => ({
+        href: link.getAttribute('href'),
+        text: link.textContent?.trim()
+      }))
+      .filter(link => {
+        if (!link.href || !link.text) return false;
+        
+        // Ensure it's an internal link
+        const isInternal = link.href.startsWith('/') || link.href.startsWith(baseUrl);
+        
+        // Filter out common navigation patterns
+        const isNavigation = /^(home|about|contact|services|blog|booking)$/i.test(link.text);
+        const isBrandName = link.text.toLowerCase().includes('legionx') || link.text.toLowerCase().includes('studios');
+        
+        return isInternal && !isNavigation && !isBrandName;
+      });
+
+    console.log('Content links extracted:', links.length);
+
     const content = Array.from(doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6'))
       .map(el => el.textContent)
       .join(' ')
       .trim();
 
-    // Extract all internal links
-    const baseUrl = new URL(url).origin;
-    const links = Array.from(doc.querySelectorAll('a[href]'))
-      .map(link => ({
-        href: link.getAttribute('href'),
-        text: link.textContent?.trim()
-      }))
-      .filter(link => link.href && (link.href.startsWith('/') || link.href.startsWith(baseUrl)));
-
-    console.log('Content extracted:', { title, contentLength: content.length, linksCount: links.length });
-
-    // Use Hugging Face for zero-shot classification to get main keywords
     const keywordResponse = await fetch(
       "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
       {
@@ -80,20 +99,15 @@ serve(async (req) => {
       throw new Error('Invalid response from Hugging Face keyword analysis');
     }
     
-    // Filter labels with scores > 0.3
     const mainKeywords = keywordData.labels.filter((_, index) => 
       keywordData.scores[index] > 0.3
     );
 
-    // Analyze links and generate suggestions
     const suggestions = await Promise.all(
       links.map(async (link) => {
         try {
-          if (!link.text) {
-            return null;
-          }
+          if (!link.text) return null;
 
-          // Use Hugging Face to analyze relevance
           const relevanceResponse = await fetch(
             "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
             {
@@ -121,9 +135,10 @@ serve(async (req) => {
           }
           
           const relevanceScore = relevanceData.scores[0];
+          const fullUrl = link.href?.startsWith('/') ? `${baseUrl}${link.href}` : link.href;
 
           return {
-            sourceUrl: link.href?.startsWith('/') ? `${baseUrl}${link.href}` : link.href,
+            sourceUrl: fullUrl,
             targetUrl: url,
             suggestedAnchorText: link.text,
             relevanceScore,
@@ -136,13 +151,11 @@ serve(async (req) => {
       })
     );
 
-    // Filter out null suggestions and create Supabase client
     const validSuggestions = suggestions.filter(s => s !== null);
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Store analysis results in the database
     const { data, error } = await supabase
       .from('page_analysis')
       .insert({
