@@ -35,7 +35,7 @@ export async function crawlPage(
     // Extract page content
     const title = doc.querySelector('title')?.textContent || '';
     const mainContent = doc.querySelector('main, article, .content, [role="main"]')?.textContent || 
-                      doc.body?.textContent || '';
+                       doc.body?.textContent || '';
     
     // Store page in database
     const page = await savePage(websiteId, url, title, mainContent);
@@ -72,5 +72,6 @@ export async function crawlPage(
 
   } catch (e) {
     console.error(`Error crawling ${url}:`, e);
+    throw e;
   }
 }

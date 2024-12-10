@@ -28,7 +28,10 @@ serve(async (req) => {
       parsedUrl = new URL(url);
     } catch (e) {
       return new Response(
-        JSON.stringify({ error: 'Invalid URL provided' }),
+        JSON.stringify({ 
+          error: 'Invalid URL provided',
+          details: e
+        }),
         { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -64,7 +67,12 @@ serve(async (req) => {
         pagesProcessed: visited.size,
         domain
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
     );
 
   } catch (error) {
@@ -72,7 +80,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: error.message,
-        details: error.stack
+        details: error
       }),
       { 
         status: 500,
