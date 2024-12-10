@@ -46,7 +46,9 @@ serve(async (req) => {
         href: link.getAttribute('href'),
         text: link.textContent?.trim()
       }))
-      .filter(link => link.href && link.href.startsWith('/') || link.href.startsWith(baseUrl));
+      .filter(link => link.href && (link.href.startsWith('/') || link.href.startsWith(baseUrl)));
+
+    console.log('Content extracted:', { title, contentLength: content.length, linksCount: links.length });
 
     // Use Hugging Face for zero-shot classification to get main keywords
     const keywordResponse = await fetch(
@@ -73,6 +75,10 @@ serve(async (req) => {
 
     const keywordData = await keywordResponse.json();
     console.log('Keyword analysis response:', keywordData);
+
+    if (!keywordData.labels || !keywordData.scores) {
+      throw new Error('Invalid response from Hugging Face keyword analysis');
+    }
     
     // Filter labels with scores > 0.3
     const mainKeywords = keywordData.labels.filter((_, index) => 
@@ -82,44 +88,59 @@ serve(async (req) => {
     // Analyze links and generate suggestions
     const suggestions = await Promise.all(
       links.map(async (link) => {
-        // Use Hugging Face to analyze relevance
-        const relevanceResponse = await fetch(
-          "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${HF_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              inputs: link.text || '',
-              parameters: {
-                candidate_labels: [content.substring(0, 200)],
-                multi_label: false
-              }
-            }),
+        try {
+          if (!link.text) {
+            return null;
           }
-        );
 
-        const relevanceData = await relevanceResponse.json();
-        console.log('Relevance analysis for link:', link.text, relevanceData);
-        
-        const relevanceScore = relevanceData.scores[0];
+          // Use Hugging Face to analyze relevance
+          const relevanceResponse = await fetch(
+            "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${HF_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                inputs: link.text,
+                parameters: {
+                  candidate_labels: [content.substring(0, 200)],
+                  multi_label: false
+                }
+              }),
+            }
+          );
 
-        return {
-          sourceUrl: link.href?.startsWith('/') ? `${baseUrl}${link.href}` : link.href,
-          targetUrl: url,
-          suggestedAnchorText: link.text || '',
-          relevanceScore,
-          context: content.substring(0, 200)
-        };
+          const relevanceData = await relevanceResponse.json();
+          console.log('Relevance analysis for link:', link.text, relevanceData);
+
+          if (!relevanceData.scores || !relevanceData.scores[0]) {
+            console.log('Invalid relevance score for link:', link.text);
+            return null;
+          }
+          
+          const relevanceScore = relevanceData.scores[0];
+
+          return {
+            sourceUrl: link.href?.startsWith('/') ? `${baseUrl}${link.href}` : link.href,
+            targetUrl: url,
+            suggestedAnchorText: link.text,
+            relevanceScore,
+            context: content.substring(0, 200)
+          };
+        } catch (error) {
+          console.error('Error analyzing link:', link.text, error);
+          return null;
+        }
       })
     );
 
-    // Create a Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const supabase = createClient(supabaseUrl!, supabaseKey!)
+    // Filter out null suggestions and create Supabase client
+    const validSuggestions = suggestions.filter(s => s !== null);
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Store analysis results in the database
     const { data, error } = await supabase
@@ -129,32 +150,35 @@ serve(async (req) => {
         title,
         content,
         main_keywords: mainKeywords,
-        suggestions
+        suggestions: validSuggestions
       })
       .select()
-      .single()
+      .single();
 
-    if (error) throw error
+    if (error) throw error;
 
     return new Response(
       JSON.stringify({
-        totalLinks: links.length,
-        issues: suggestions.filter(s => s.relevanceScore < 0.5).length,
-        status: 'complete',
-        suggestions
+        pageContents: [{
+          url,
+          title,
+          content: content.substring(0, 500),
+          mainKeywords
+        }],
+        suggestions: validSuggestions
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
-    )
+    );
   } catch (error) {
-    console.error('Error:', error.message)
+    console.error('Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       },
-    )
+    );
   }
 })
