@@ -1,8 +1,7 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export interface Website {
@@ -18,7 +17,7 @@ export async function getOrCreateWebsite(domain: string): Promise<Website> {
     // First try to find existing website
     const { data: existingWebsite, error: fetchError } = await supabase
       .from('websites')
-      .select('*')
+      .select()
       .eq('domain', domain)
       .single();
 
@@ -31,17 +30,19 @@ export async function getOrCreateWebsite(domain: string): Promise<Website> {
       console.log('Found existing website:', existingWebsite);
       
       // Update last_crawled_at
-      const { error: updateError } = await supabase
+      const { data: updatedWebsite, error: updateError } = await supabase
         .from('websites')
         .update({ last_crawled_at: new Date().toISOString() })
-        .eq('id', existingWebsite.id);
+        .eq('id', existingWebsite.id)
+        .select()
+        .single();
 
       if (updateError) {
         console.error('Error updating website:', updateError);
         throw new Error(`Failed to update website: ${updateError.message}`);
       }
 
-      return existingWebsite;
+      return updatedWebsite;
     }
 
     // Create new website if none exists
@@ -73,24 +74,53 @@ export async function savePage(websiteId: string, url: string, title: string, co
   console.log('Saving page:', { websiteId, url, title });
   
   try {
-    const { data: page, error } = await supabase
+    // First try to find existing page
+    const { data: existingPage, error: fetchError } = await supabase
       .from('pages')
-      .upsert({
+      .select()
+      .eq('url', url)
+      .single();
+
+    if (existingPage) {
+      // Update existing page
+      const { data: updatedPage, error: updateError } = await supabase
+        .from('pages')
+        .update({
+          title,
+          content,
+          last_crawled_at: new Date().toISOString()
+        })
+        .eq('id', existingPage.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating page:', updateError);
+        throw new Error(`Failed to update page: ${updateError.message}`);
+      }
+
+      return updatedPage;
+    }
+
+    // Create new page
+    const { data: newPage, error: createError } = await supabase
+      .from('pages')
+      .insert([{
         website_id: websiteId,
         url,
         title,
         content,
         last_crawled_at: new Date().toISOString()
-      })
+      }])
       .select()
       .single();
 
-    if (error) {
-      console.error('Error saving page:', error);
-      throw new Error(`Failed to save page: ${error.message}`);
+    if (createError) {
+      console.error('Error creating page:', createError);
+      throw new Error(`Failed to create page: ${createError.message}`);
     }
 
-    return page;
+    return newPage;
   } catch (error) {
     console.error('Error in savePage:', error);
     throw error;
@@ -113,8 +143,7 @@ export async function saveLink(
         source_page_id: sourcePageId,
         anchor_text: anchorText,
         context,
-        is_internal: isInternal,
-        url: targetUrl
+        is_internal: isInternal
       });
 
     if (error) {
@@ -125,4 +154,48 @@ export async function saveLink(
     console.error('Error in saveLink:', error);
     // Don't throw here as link saving is not critical
   }
+}
+
+export async function savePageAnalysis(
+  url: string,
+  title: string,
+  content: string,
+  mainKeywords: string[],
+  outboundLinksCount: number,
+  inboundLinksCount: number
+) {
+  console.log('Saving page analysis:', { url, title, outboundLinksCount, inboundLinksCount });
+  
+  try {
+    const { data, error } = await supabase
+      .from('page_analysis')
+      .insert([{
+        url,
+        title,
+        content,
+        main_keywords: mainKeywords,
+        outbound_links_count: outboundLinksCount,
+        inbound_links_count: inboundLinksCount,
+        link_score: calculateLinkScore(outboundLinksCount, inboundLinksCount)
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving page analysis:', error);
+      throw new Error(`Failed to save page analysis: ${error.message}`);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in savePageAnalysis:', error);
+    throw error;
+  }
+}
+
+function calculateLinkScore(outbound: number, inbound: number): number {
+  // Simple scoring algorithm - can be made more sophisticated
+  const balance = Math.min(outbound, inbound) / Math.max(outbound, inbound);
+  const quantity = Math.min((outbound + inbound) / 20, 1); // Assume 20 links is "good"
+  return (balance * 0.6 + quantity * 0.4) * 5; // Score out of 5
 }
