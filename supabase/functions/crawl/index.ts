@@ -1,11 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
 interface CrawlRequest {
   url: string;
@@ -13,6 +13,7 @@ interface CrawlRequest {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -21,23 +22,37 @@ serve(async (req) => {
     const { url, maxPages = 50 } = await req.json() as CrawlRequest;
     console.log(`Starting crawl for URL: ${url} with max pages: ${maxPages}`);
 
+    // Validate URL
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch (e) {
+      throw new Error('Invalid URL provided');
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Extract domain from URL
-    const domain = new URL(url).hostname;
+    // Extract domain more safely using URL API
+    const domain = parsedUrl.hostname;
     console.log(`Extracted domain: ${domain}`);
 
     // Create or update website record
     const { data: website, error: websiteError } = await supabase
       .from('websites')
-      .upsert({ domain, last_crawled_at: new Date().toISOString() })
+      .upsert({ 
+        domain, 
+        last_crawled_at: new Date().toISOString() 
+      })
       .select()
       .single();
 
-    if (websiteError) throw websiteError;
+    if (websiteError) {
+      console.error('Website upsert error:', websiteError);
+      throw websiteError;
+    }
     console.log(`Website record created/updated: ${website.id}`);
 
     // Initialize crawl queue and visited set
@@ -55,14 +70,23 @@ serve(async (req) => {
       try {
         console.log(`Crawling: ${currentUrl}`);
         const response = await fetch(currentUrl);
+        if (!response.ok) {
+          console.warn(`Failed to fetch ${currentUrl}: ${response.status}`);
+          continue;
+        }
+
         const html = await response.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
         
-        if (!doc) continue;
+        if (!doc) {
+          console.warn(`Failed to parse HTML for ${currentUrl}`);
+          continue;
+        }
 
         // Extract page content
         const title = doc.querySelector('title')?.textContent || '';
-        const mainContent = doc.querySelector('main, article, .content, [role="main"]')?.textContent || '';
+        const mainContent = doc.querySelector('main, article, .content, [role="main"]')?.textContent || 
+                          doc.body?.textContent || '';
         
         // Store page in database
         const { data: page, error: pageError } = await supabase
@@ -77,7 +101,11 @@ serve(async (req) => {
           .select()
           .single();
 
-        if (pageError) throw pageError;
+        if (pageError) {
+          console.error('Page upsert error:', pageError);
+          continue;
+        }
+
         pageMap.set(currentUrl, page);
 
         // Extract and process links
@@ -95,7 +123,7 @@ serve(async (req) => {
             }
 
             // Store link in database
-            await supabase
+            const { error: linkError } = await supabase
               .from('links')
               .upsert({
                 source_page_id: page.id,
@@ -105,6 +133,10 @@ serve(async (req) => {
                 url: absoluteUrl
               })
               .select();
+
+            if (linkError) {
+              console.error('Link upsert error:', linkError);
+            }
 
           } catch (e) {
             console.error(`Error processing link ${href}:`, e);
