@@ -27,8 +27,8 @@ const Index = () => {
       
       setResults({
         url,
-        totalLinks: Math.floor(Math.random() * 100),
-        issues: Math.floor(Math.random() * 10),
+        totalLinks: analysisResults.pageContents.length,
+        issues: Math.floor(Math.random() * 10), // This will come from the Python backend
         status: "complete",
         suggestions: analysisResults.suggestions
       });
@@ -36,7 +36,7 @@ const Index = () => {
       toast.success("Analysis complete!");
     } catch (error) {
       console.error("Analysis failed:", error);
-      toast.error("Failed to analyze URL");
+      toast.error("Failed to analyze URL. Please try again.");
       setResults(null);
     } finally {
       setIsAnalyzing(false);

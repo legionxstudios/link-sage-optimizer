@@ -15,10 +15,12 @@ interface LinkSuggestion {
   context: string;
 }
 
-export const analyzePage = async (url: string): Promise<{
+interface AnalysisResponse {
   pageContents: PageContent[];
   suggestions: LinkSuggestion[];
-}> => {
+}
+
+export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
@@ -61,6 +63,9 @@ export const analyzePage = async (url: string): Promise<{
         context: "Our expert consulting services help businesses achieve their goals.",
       },
     ];
+
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     return {
       pageContents: mockPageContents,
