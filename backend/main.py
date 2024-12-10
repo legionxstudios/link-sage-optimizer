@@ -7,6 +7,7 @@ import logging
 from modules.content_extractor import extract_content
 from modules.keyword_extractor import extract_keywords
 from modules.link_suggester import find_keyword_contexts
+from modules.data_validator import validate_extracted_data
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -78,17 +79,25 @@ async def analyze_page(request: AnalysisRequest):
             response.raise_for_status()
             logger.info(f"Successfully fetched content, status code: {response.status_code}")
         
-        # Extract content and analyze links
+        # Extract content and validate
         extracted_data = extract_content(response.text, str(request.url))
-        logger.info(f"Content extraction completed. Title: {extracted_data['title']}")
+        validated_data = validate_extracted_data(extracted_data)
+        
+        if not validated_data:
+            raise HTTPException(
+                status_code=422,
+                detail="Failed to validate extracted content"
+            )
+        
+        logger.info(f"Content validation successful for URL: {request.url}")
         
         # Extract keywords
-        main_keywords = extract_keywords(extracted_data['content'])
+        main_keywords = extract_keywords(validated_data.content)
         logger.info(f"Extracted keywords: {main_keywords}")
         
         # Calculate link counts
-        internal_links_count = len(extracted_data['internal_links'])
-        external_links_count = len(extracted_data['external_links'])
+        internal_links_count = len(validated_data.internal_links)
+        external_links_count = len(validated_data.external_links)
         logger.info(f"Link counts - Internal: {internal_links_count}, External: {external_links_count}")
         
         # Calculate link score
@@ -97,13 +106,13 @@ async def analyze_page(request: AnalysisRequest):
         
         # Generate suggestions
         outbound_suggestions = find_keyword_contexts(
-            extracted_data['content'],
+            validated_data.content,
             main_keywords,
             is_outbound=True
         )
         
         inbound_suggestions = find_keyword_contexts(
-            extracted_data['content'],
+            validated_data.content,
             main_keywords,
             is_outbound=False
         )
@@ -113,8 +122,8 @@ async def analyze_page(request: AnalysisRequest):
         # Create page content object
         page_content = PageContent(
             url=str(request.url),
-            title=extracted_data['title'],
-            content=extracted_data['content'][:1000],  # Truncate content for response
+            title=validated_data.title,
+            content=validated_data.content[:1000],  # Truncate content for response
             mainKeywords=main_keywords,
             internalLinksCount=internal_links_count,
             externalLinksCount=external_links_count
