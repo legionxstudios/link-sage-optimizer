@@ -13,6 +13,43 @@ class ContentExtractor(BaseCrawler):
         super().__init__(base_url)
         self.html_extractor = HTMLExtractor()
 
+    async def analyze_site_links(self, start_url: str, max_pages: int = 50) -> Dict:
+        """Analyze internal linking structure starting from a URL."""
+        try:
+            logger.info(f"Starting site analysis from {start_url}")
+            
+            # First crawl the entire site to build the link graph
+            crawl_results = await self.crawl_site(max_pages)
+            logger.info(f"Site crawl complete. Analyzing {len(crawl_results['pages'])} pages")
+            
+            # Get the main content for the target page
+            main_content = await self.extract_page_content(start_url)
+            
+            # Find all inbound links to our target page
+            inbound_links = []
+            for source_url, page_links in crawl_results['link_graph'].items():
+                for link in page_links:
+                    if link['url'] == start_url:
+                        inbound_links.append({
+                            'source_url': source_url,
+                            'anchor_text': link['text'],
+                            'context': link['context']
+                        })
+            
+            logger.info(f"Found {len(inbound_links)} inbound links to {start_url}")
+            
+            return {
+                'main_content': main_content,
+                'inbound_links': inbound_links,
+                'outbound_links': main_content['internal_links'],
+                'external_links': main_content['external_links'],
+                'pages_analyzed': len(crawl_results['pages'])
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in site analysis: {str(e)}")
+            raise
+
     async def extract_page_content(self, url: str) -> Dict:
         """Extract content from a single page."""
         try:
@@ -24,71 +61,22 @@ class ContentExtractor(BaseCrawler):
             soup = BeautifulSoup(html, 'html.parser')
             
             # Extract main content and links
-            main_content = self.html_extractor.extract_main_content(soup)
-            links = self.html_extractor.extract_links(soup, url, self.domain)
+            main_content = self._extract_content(soup)
+            links = self._extract_links(soup, url)
+            
+            # Separate internal and external links
+            internal_links = [link for link in links if link['is_internal']]
+            external_links = [link for link in links if not link['is_internal']]
             
             return {
                 'url': url,
                 'title': soup.title.string if soup.title else '',
                 'content': main_content,
-                'internal_links': links['internal_links'],
-                'external_links': links['external_links']
+                'internal_links': internal_links,
+                'external_links': external_links
             }
         except Exception as e:
             logger.error(f"Error extracting content from {url}: {str(e)}")
-            raise
-
-    async def analyze_site_links(self, start_url: str, max_pages: int = 50) -> Dict:
-        """Analyze internal linking structure starting from a URL."""
-        self.visited_urls.clear()
-        inbound_links = []
-        
-        try:
-            # First get the main page content
-            main_content = await self.extract_page_content(start_url)
-            
-            # Then crawl other pages to analyze internal linking
-            to_visit = {link['url'] for link in main_content['internal_links']}
-            while to_visit and len(self.visited_urls) < max_pages:
-                current_url = to_visit.pop()
-                if current_url in self.visited_urls:
-                    continue
-                    
-                try:
-                    page_content = await self.extract_page_content(current_url)
-                    self.visited_urls.add(current_url)
-                    
-                    # Track links pointing to our target page
-                    for link in page_content['internal_links']:
-                        if link['url'] == start_url:
-                            inbound_links.append({
-                                'source_url': current_url,
-                                'anchor_text': link['text'],
-                                'context': link['context']
-                            })
-                            
-                    # Add new internal links to visit
-                    to_visit.update({
-                        link['url'] for link in page_content['internal_links']
-                        if link['url'] not in self.visited_urls
-                    })
-                except Exception as e:
-                    logger.error(f"Error analyzing page {current_url}: {str(e)}")
-                    continue
-                    
-                # Small delay to be nice to the server
-                await asyncio.sleep(0.5)
-            
-            return {
-                'main_content': main_content,
-                'inbound_links': inbound_links,
-                'outbound_links': main_content['internal_links'],
-                'external_links': main_content['external_links'],
-                'pages_analyzed': len(self.visited_urls)
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in site analysis: {str(e)}")
             raise
 
 def extract_content(url: str) -> Dict:
