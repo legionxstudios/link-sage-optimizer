@@ -1,7 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { ArrowDown, ArrowUp, Star } from "lucide-react";
 import { AnalysisMetricCard } from "./AnalysisMetricCard";
-import { PageIssuesList } from "./PageIssuesList";
 import { LinkSuggestions } from "./LinkSuggestions";
 import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,13 +29,9 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
   const totalInbound = results.inboundSuggestions?.length || 0;
   const linkScore = results.linkScore || 0;
 
-  console.log("Processed analysis data:", {
-    pageContent,
-    internalLinks,
-    externalLinks,
-    totalOutbound,
-    totalInbound,
-    linkScore
+  console.log("Processing suggestions:", {
+    outbound: results.outboundSuggestions,
+    inbound: results.inboundSuggestions
   });
 
   return (
