@@ -69,6 +69,8 @@ def calculate_link_score(internal_links: int, external_links: int) -> float:
 async def analyze_page(request: AnalysisRequest):
     """Analyze a webpage and generate both inbound and outbound linking suggestions."""
     try:
+        logger.info(f"Starting analysis for URL: {request.url}")
+        
         # Fetch and extract content
         async with httpx.AsyncClient() as client:
             response = await client.get(str(request.url))
@@ -76,6 +78,7 @@ async def analyze_page(request: AnalysisRequest):
         
         # Extract content and analyze links
         extracted_data = extract_content(response.text, str(request.url))
+        logger.info(f"Extracted data: {extracted_data}")
         
         # Extract keywords
         main_keywords = extract_keywords(extracted_data['content'])
@@ -84,9 +87,11 @@ async def analyze_page(request: AnalysisRequest):
         # Calculate link counts
         internal_links_count = len(extracted_data['internal_links'])
         external_links_count = len(extracted_data['external_links'])
+        logger.info(f"Link counts - Internal: {internal_links_count}, External: {external_links_count}")
         
         # Calculate link score
         link_score = calculate_link_score(internal_links_count, external_links_count)
+        logger.info(f"Calculated link score: {link_score}")
         
         # Generate suggestions
         outbound_suggestions = find_keyword_contexts(
@@ -107,7 +112,7 @@ async def analyze_page(request: AnalysisRequest):
         page_content = PageContent(
             url=str(request.url),
             title=extracted_data['title'],
-            content=extracted_data['content'][:1000],
+            content=extracted_data['content'][:1000],  # Truncate content for response
             mainKeywords=main_keywords,
             internalLinksCount=internal_links_count,
             externalLinksCount=external_links_count
