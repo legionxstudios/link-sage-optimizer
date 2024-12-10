@@ -1,16 +1,28 @@
 import { supabase } from "@/integrations/supabase/client";
 
-interface LinkSuggestion {
+export interface PageContent {
+  url: string;
+  title: string;
+  content: string;
+  mainKeywords: string[];
+  internalLinksCount: number;
+  externalLinksCount: number;
+}
+
+export interface LinkSuggestion {
   sourceUrl: string;
   targetUrl: string;
   suggestedAnchorText: string;
+  matchType: string;
   relevanceScore: number;
   context: string;
 }
 
-interface AnalysisResponse {
-  pageContents: any[];
-  suggestions: LinkSuggestion[];
+export interface AnalysisResponse {
+  pageContents: PageContent[];
+  outboundSuggestions: LinkSuggestion[];
+  inboundSuggestions: LinkSuggestion[];
+  linkScore: number;
 }
 
 export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
