@@ -9,37 +9,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 interface AnalysisResult {
   url: string;
   status: "analyzing" | "complete" | "error";
-  suggestions: Array<{
-    sourceUrl: string;
-    targetUrl: string;
-    suggestedAnchorText: string;
-    relevanceScore: number;
-    context: string;
-    matchType?: string;
+  pageContents: Array<{
+    internalLinksCount: number;
+    externalLinksCount: number;
   }>;
   outboundSuggestions?: Array<any>;
   inboundSuggestions?: Array<any>;
+  linkScore: number;
 }
 
 interface AnalysisResultsProps {
   results: AnalysisResult;
 }
 
-const calculateLinkScore = (inboundCount: number): number => {
-  // Base score calculation:
-  // 0-5 links: 1-2 stars
-  // 6-15 links: 3-4 stars
-  // 16+ links: 5 stars
-  if (inboundCount === 0) return 0;
-  if (inboundCount <= 5) return Math.max(1, Math.ceil(inboundCount / 3));
-  if (inboundCount <= 15) return Math.min(4, Math.ceil(inboundCount / 4));
-  return 5;
-};
-
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
-  const outboundCount = results.outboundSuggestions?.length || 0;
-  const inboundCount = results.inboundSuggestions?.length || 0;
-  const linkScore = calculateLinkScore(inboundCount);
+  const pageContent = results.pageContents[0];
+  const totalOutbound = pageContent?.internalLinksCount + pageContent?.externalLinksCount || 0;
+  const totalInbound = results.inboundSuggestions?.length || 0;
+  const linkScore = results.linkScore || 0;
 
   return (
     <motion.div
@@ -61,20 +48,20 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
             <AnalysisMetricCard
               icon={ArrowDown}
               title="Links To"
-              value={outboundCount}
-              tooltip="Number of suggested outbound links from this page"
+              value={totalOutbound}
+              tooltip="Total number of outbound links (internal + external) on this page"
             />
             <AnalysisMetricCard
               icon={ArrowUp}
               title="Links From"
-              value={inboundCount}
+              value={totalInbound}
               tooltip="Number of suggested inbound links to this page"
             />
             <AnalysisMetricCard
               icon={Star}
               title="Link Score"
               value={`${linkScore}/5`}
-              tooltip="Score based on the number of inbound links (higher is better)"
+              tooltip="Overall link quality score based on quantity and balance of internal/external links"
             />
           </div>
         </div>

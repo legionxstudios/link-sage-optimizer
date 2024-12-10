@@ -14,7 +14,10 @@ export type Database = {
           content: string | null
           created_at: string | null
           id: string
+          inbound_links_count: number | null
+          link_score: number | null
           main_keywords: string[] | null
+          outbound_links_count: number | null
           suggestions: Json | null
           title: string | null
           url: string
@@ -23,7 +26,10 @@ export type Database = {
           content?: string | null
           created_at?: string | null
           id?: string
+          inbound_links_count?: number | null
+          link_score?: number | null
           main_keywords?: string[] | null
+          outbound_links_count?: number | null
           suggestions?: Json | null
           title?: string | null
           url: string
@@ -32,7 +38,10 @@ export type Database = {
           content?: string | null
           created_at?: string | null
           id?: string
+          inbound_links_count?: number | null
+          link_score?: number | null
           main_keywords?: string[] | null
+          outbound_links_count?: number | null
           suggestions?: Json | null
           title?: string | null
           url?: string

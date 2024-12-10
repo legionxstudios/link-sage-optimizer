@@ -8,13 +8,11 @@ from modules.content_extractor import extract_content
 from modules.keyword_extractor import extract_keywords
 from modules.link_suggester import find_keyword_contexts
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,6 +29,8 @@ class PageContent(BaseModel):
     title: str
     content: str
     mainKeywords: List[str]
+    internalLinksCount: int
+    externalLinksCount: int
 
 class LinkSuggestion(BaseModel):
     sourceUrl: str
@@ -44,6 +44,26 @@ class AnalysisResponse(BaseModel):
     pageContents: List[PageContent]
     outboundSuggestions: List[LinkSuggestion]
     inboundSuggestions: List[LinkSuggestion]
+    linkScore: float
+
+def calculate_link_score(internal_links: int, external_links: int) -> float:
+    """Calculate a score based on the number and balance of links."""
+    total_links = internal_links + external_links
+    if total_links == 0:
+        return 0.0
+    
+    # Base score from total number of links (max 5 points)
+    base_score = min(5, total_links / 4)
+    
+    # Balance score - reward having both internal and external links
+    balance_score = 0
+    if internal_links > 0 and external_links > 0:
+        ratio = min(internal_links, external_links) / max(internal_links, external_links)
+        balance_score = ratio * 2  # Max 2 points for perfect balance
+    
+    # Combine scores (max 7 points, normalize to 0-5 range)
+    total_score = (base_score + balance_score) * (5/7)
+    return round(total_score, 2)
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_page(request: AnalysisRequest):
@@ -53,42 +73,51 @@ async def analyze_page(request: AnalysisRequest):
         async with httpx.AsyncClient() as client:
             response = await client.get(str(request.url))
             response.raise_for_status()
-            
-        # Extract content
-        extracted_data = extract_content(response.text)
+        
+        # Extract content and analyze links
+        extracted_data = extract_content(response.text, str(request.url))
         
         # Extract keywords
         main_keywords = extract_keywords(extracted_data['content'])
         logger.info(f"Extracted keywords: {main_keywords}")
         
-        # Generate outbound suggestions (links to other pages)
+        # Calculate link counts
+        internal_links_count = len(extracted_data['internal_links'])
+        external_links_count = len(extracted_data['external_links'])
+        
+        # Calculate link score
+        link_score = calculate_link_score(internal_links_count, external_links_count)
+        
+        # Generate suggestions
         outbound_suggestions = find_keyword_contexts(
-            extracted_data['content'], 
+            extracted_data['content'],
             main_keywords,
             is_outbound=True
         )
-        logger.info(f"Generated {len(outbound_suggestions)} outbound suggestions")
         
-        # Generate inbound suggestions (links from other pages)
         inbound_suggestions = find_keyword_contexts(
             extracted_data['content'],
             main_keywords,
             is_outbound=False
         )
-        logger.info(f"Generated {len(inbound_suggestions)} inbound suggestions")
+        
+        logger.info(f"Generated {len(outbound_suggestions)} outbound and {len(inbound_suggestions)} inbound suggestions")
         
         # Create page content object
         page_content = PageContent(
             url=str(request.url),
             title=extracted_data['title'],
             content=extracted_data['content'][:1000],
-            mainKeywords=main_keywords
+            mainKeywords=main_keywords,
+            internalLinksCount=internal_links_count,
+            externalLinksCount=external_links_count
         )
         
         return AnalysisResponse(
             pageContents=[page_content],
             outboundSuggestions=outbound_suggestions,
-            inboundSuggestions=inbound_suggestions
+            inboundSuggestions=inbound_suggestions,
+            linkScore=link_score
         )
     except Exception as e:
         logger.error(f"Error in analysis: {str(e)}")
