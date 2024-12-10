@@ -9,62 +9,13 @@ from modules.keyword_extractor import extract_keywords
 from modules.link_suggester import find_keyword_contexts
 from modules.data_validator import validate_extracted_data
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class AnalysisRequest(BaseModel):
-    url: HttpUrl
-
-class PageContent(BaseModel):
-    url: str
-    title: str
-    content: str
-    mainKeywords: List[str]
-    internalLinksCount: int
-    externalLinksCount: int
-
-class LinkSuggestion(BaseModel):
-    sourceUrl: str
-    targetUrl: str
-    suggestedAnchorText: str
-    matchType: str
-    relevanceScore: float
-    context: str
-
-class AnalysisResponse(BaseModel):
-    pageContents: List[PageContent]
-    outboundSuggestions: List[LinkSuggestion]
-    inboundSuggestions: List[LinkSuggestion]
-    linkScore: float
-
-def calculate_link_score(internal_links: int, external_links: int) -> float:
-    """Calculate a score based on the number and balance of links."""
-    total_links = internal_links + external_links
-    if total_links == 0:
-        return 0.0
-    
-    # Base score from total number of links (max 5 points)
-    base_score = min(5, total_links / 4)
-    
-    # Balance score - reward having both internal and external links
-    balance_score = 0
-    if internal_links > 0 and external_links > 0:
-        ratio = min(internal_links, external_links) / max(internal_links, external_links)
-        balance_score = ratio * 2  # Max 2 points for perfect balance
-    
-    # Combine scores (max 7 points, normalize to 0-5 range)
-    total_score = (base_score + balance_score) * (5/7)
-    return round(total_score, 2)
+# ... keep existing code (FastAPI setup and models)
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_page(request: AnalysisRequest):
@@ -72,18 +23,32 @@ async def analyze_page(request: AnalysisRequest):
     try:
         logger.info(f"Starting analysis for URL: {request.url}")
         
-        # Fetch and extract content
-        async with httpx.AsyncClient() as client:
-            logger.info(f"Fetching content from URL: {request.url}")
-            response = await client.get(str(request.url), follow_redirects=True)
-            response.raise_for_status()
-            logger.info(f"Successfully fetched content, status code: {response.status_code}")
+        # Fetch and extract content with timeout
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                logger.info(f"Fetching content from URL: {request.url}")
+                response = await client.get(str(request.url), follow_redirects=True)
+                response.raise_for_status()
+                logger.info(f"Successfully fetched content, status code: {response.status_code}")
+            except httpx.TimeoutError:
+                logger.error("Timeout while fetching URL content")
+                raise HTTPException(
+                    status_code=504,
+                    detail="Timeout while fetching URL content"
+                )
+            except Exception as e:
+                logger.error(f"Error fetching URL: {str(e)}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Error fetching URL: {str(e)}"
+                )
         
         # Extract content and validate
         extracted_data = extract_content(response.text, str(request.url))
         validated_data = validate_extracted_data(extracted_data)
         
         if not validated_data:
+            logger.error("Failed to validate extracted content")
             raise HTTPException(
                 status_code=422,
                 detail="Failed to validate extracted content"
@@ -104,20 +69,26 @@ async def analyze_page(request: AnalysisRequest):
         link_score = calculate_link_score(internal_links_count, external_links_count)
         logger.info(f"Calculated link score: {link_score}")
         
-        # Generate suggestions
-        outbound_suggestions = find_keyword_contexts(
-            validated_data.content,
-            main_keywords,
-            is_outbound=True
-        )
-        
-        inbound_suggestions = find_keyword_contexts(
-            validated_data.content,
-            main_keywords,
-            is_outbound=False
-        )
-        
-        logger.info(f"Generated {len(outbound_suggestions)} outbound and {len(inbound_suggestions)} inbound suggestions")
+        # Generate suggestions with proper error handling
+        try:
+            outbound_suggestions = await find_keyword_contexts(
+                validated_data.content,
+                main_keywords,
+                is_outbound=True
+            )
+            
+            inbound_suggestions = await find_keyword_contexts(
+                validated_data.content,
+                main_keywords,
+                is_outbound=False
+            )
+            
+            logger.info(f"Generated {len(outbound_suggestions)} outbound and {len(inbound_suggestions)} inbound suggestions")
+            
+        except Exception as e:
+            logger.error(f"Error generating suggestions: {str(e)}")
+            outbound_suggestions = []
+            inbound_suggestions = []
         
         # Create page content object
         page_content = PageContent(
@@ -135,10 +106,7 @@ async def analyze_page(request: AnalysisRequest):
             inboundSuggestions=inbound_suggestions,
             linkScore=link_score
         )
+        
     except Exception as e:
         logger.error(f"Error in analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
