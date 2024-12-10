@@ -1,12 +1,4 @@
-import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -38,59 +30,63 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
     }
   };
 
+  const getAnchorTextType = (suggestion: LinkSuggestion) => {
+    const score = suggestion.relevanceScore;
+    if (score >= 0.9) return "Exact Match";
+    if (score >= 0.7) return "Phrase Match";
+    return "LSI Match";
+  };
+
   return (
-    <Card className="p-6">
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Link Suggestions</h3>
-        <p className="text-sm text-muted-foreground">
-          AI-powered suggestions for internal linking opportunities from your content
-        </p>
-        
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Source Page</TableHead>
-              <TableHead>Suggested Anchor Text</TableHead>
-              <TableHead>Relevance</TableHead>
-              <TableHead>Suggested Context</TableHead>
+    <div className="space-y-4">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Target Page</TableHead>
+            <TableHead>Suggested Anchor Text</TableHead>
+            <TableHead>Match Type</TableHead>
+            <TableHead>Relevance</TableHead>
+            <TableHead>Suggested Context</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {suggestions.map((suggestion, index) => (
+            <TableRow key={index}>
+              <TableCell className="max-w-[200px] truncate">
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help">
+                    {formatUrl(suggestion.targetUrl)}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Full URL: {suggestion.targetUrl}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline">{suggestion.suggestedAnchorText}</Badge>
+              </TableCell>
+              <TableCell>
+                <Badge variant="secondary">{getAnchorTextType(suggestion)}</Badge>
+              </TableCell>
+              <TableCell>
+                <span className={getRelevanceColor(suggestion.relevanceScore)}>
+                  {Math.round(suggestion.relevanceScore * 100)}%
+                </span>
+              </TableCell>
+              <TableCell className="max-w-[400px]">
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help text-left">
+                    <span className="line-clamp-3 whitespace-pre-wrap">{suggestion.context}</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[500px]">
+                    <p className="whitespace-pre-wrap">{suggestion.context}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {suggestions.map((suggestion, index) => (
-              <TableRow key={index}>
-                <TableCell className="max-w-[200px] truncate">
-                  <Tooltip>
-                    <TooltipTrigger className="cursor-help">
-                      {formatUrl(suggestion.sourceUrl)}
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Full URL: {suggestion.sourceUrl}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">{suggestion.suggestedAnchorText}</Badge>
-                </TableCell>
-                <TableCell>
-                  <span className={getRelevanceColor(suggestion.relevanceScore)}>
-                    {Math.round(suggestion.relevanceScore * 100)}%
-                  </span>
-                </TableCell>
-                <TableCell className="max-w-[400px]">
-                  <Tooltip>
-                    <TooltipTrigger className="cursor-help text-left">
-                      <span className="line-clamp-3 whitespace-pre-wrap">{suggestion.context}</span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[500px]">
-                      <p className="whitespace-pre-wrap">{suggestion.context}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </Card>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 };

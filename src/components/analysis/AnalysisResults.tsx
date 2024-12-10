@@ -4,6 +4,7 @@ import { AnalysisMetricCard } from "./AnalysisMetricCard";
 import { PageIssuesList } from "./PageIssuesList";
 import { LinkSuggestions } from "./LinkSuggestions";
 import { motion } from "framer-motion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface AnalysisResult {
   url: string;
@@ -86,9 +87,43 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
         </div>
       </Card>
 
-      {results.suggestions && results.suggestions.length > 0 && (
-        <LinkSuggestions suggestions={results.suggestions} />
-      )}
+      <Card className="p-6">
+        <Tabs defaultValue="links-to" className="w-full">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold">Link Suggestions</h3>
+            <TabsList>
+              <TabsTrigger value="links-to">Links To</TabsTrigger>
+              <TabsTrigger value="links-from">Links From</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="links-to" className="mt-0">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Suggested pages to link to from your analyzed content, based on contextual relevance.
+              </p>
+              {results.suggestions && results.suggestions.length > 0 ? (
+                <LinkSuggestions suggestions={results.suggestions} />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No outbound link suggestions found for this content.
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="links-from" className="mt-0">
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Pages that should link to your analyzed content, with diversified anchor text suggestions.
+              </p>
+              <div className="text-center py-8 text-muted-foreground">
+                No inbound link suggestions available yet.
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </Card>
     </motion.div>
   );
 };
