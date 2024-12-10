@@ -1,1 +1,7 @@
 project_id = "tlcbgnczxrrpqvmronid"
+
+[functions.analyze]
+verify_jwt = false
+
+[functions.crawl]
+verify_jwt = false
