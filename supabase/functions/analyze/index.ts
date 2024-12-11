@@ -1,9 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getOrCreateWebsite, savePage, savePageAnalysis } from "./db.ts";
-import { extractContent } from "./content-analyzer.ts";
+import { extractContent } from "./content-extractor.ts";
 import { extractKeywords } from "./keyword-extractor.ts";
 import { generateSuggestions } from "./suggestion-generator.ts";
-import { AnalysisResult } from "./types.ts";
+import { savePageAnalysis } from "./db.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,51 +22,41 @@ serve(async (req) => {
       throw new Error('URL is required');
     }
 
-    // Get domain from URL
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname;
-    console.log('Domain:', domain);
+    // Extract content with timeout
+    const timeoutMs = 15000; // 15 second timeout
+    const contentPromise = extractContent(url);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Content extraction timed out')), timeoutMs)
+    );
 
-    // Create or update website record
-    const website = await getOrCreateWebsite(domain);
-    console.log('Website record:', website);
-
-    // Extract content
-    const { title, content, links } = await extractContent(url);
+    const { title, content, links } = await Promise.race([contentPromise, timeoutPromise]);
     console.log('Content extracted, length:', content.length);
 
-    // Save page
-    const page = await savePage(website.id, url, title, content);
-    console.log('Page saved:', page.id);
+    // Process in parallel for efficiency
+    const [keywords, suggestions] = await Promise.all([
+      extractKeywords(content),
+      generateSuggestions(content, links)
+    ]);
 
-    // Extract keywords
-    const keywords = extractKeywords(content);
-    console.log('Keywords extracted:', Object.keys(keywords).length);
-
-    // Generate suggestions
-    const suggestions = await generateSuggestions(content, keywords, links);
-    console.log('Suggestions generated:', suggestions.length);
-
-    const analysisResult: AnalysisResult = {
+    const analysisResult = {
       keywords,
-      outboundSuggestions: suggestions
+      outboundSuggestions: suggestions.slice(0, 10) // Limit suggestions
     };
 
-    // Save analysis results
-    await savePageAnalysis(url, {
+    // Save analysis asynchronously - don't wait for it
+    savePageAnalysis(url, {
       title,
-      content,
+      content: content.slice(0, 10000), // Limit content length
       keywords,
-      outboundSuggestions: suggestions
+      outboundSuggestions: suggestions.slice(0, 10)
+    }).catch(error => {
+      console.error('Error saving analysis:', error);
     });
 
-    console.log('Analysis completed:', analysisResult);
-
+    console.log('Analysis completed successfully');
     return new Response(
       JSON.stringify(analysisResult),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
