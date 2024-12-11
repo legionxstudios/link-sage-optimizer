@@ -3,7 +3,6 @@ import { extractContent } from "./content-analyzer.ts";
 import { extractKeywords } from "./keyword-extractor.ts";
 import { generateSEOSuggestions } from "./modules/suggestion-generator.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.3";
-import { savePageData } from "./db.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,34 +17,53 @@ serve(async (req) => {
   try {
     console.log('Starting page analysis...');
     const { url } = await req.json();
+    console.log('Received URL:', url);
 
     if (!url || typeof url !== 'string') {
+      console.error('Invalid URL provided');
       throw new Error('Valid URL is required');
     }
 
-    console.log('Analyzing URL:', url);
-
     // Extract content and analyze
+    console.log('Extracting content from URL:', url);
     const { title, content } = await extractContent(url);
-    console.log('Content extracted:', { title, contentLength: content.length });
+    console.log('Content extracted:', { 
+      title, 
+      contentLength: content.length,
+      contentPreview: content.substring(0, 100) + '...' 
+    });
 
+    if (!content || content.length < 10) {
+      console.error('Extracted content is too short or empty');
+      throw new Error('Could not extract meaningful content from URL');
+    }
+
+    console.log('Extracting keywords...');
     const keywords = await extractKeywords(content);
     console.log('Keywords extracted:', keywords);
 
+    if (!keywords.exact_match || keywords.exact_match.length === 0) {
+      console.warn('No exact match keywords found');
+    }
+
+    console.log('Generating SEO suggestions...');
     const suggestions = await generateSEOSuggestions(content, keywords.exact_match, url);
     console.log('Generated suggestions:', suggestions);
 
     // Initialize Supabase client
+    console.log('Initializing Supabase client...');
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log('Saving data to database...');
-
+    console.log('Starting database operations...');
+    
     try {
       // First, get or create website record
       const domain = new URL(url).hostname;
+      console.log('Processing domain:', domain);
+      
       const { data: website, error: websiteError } = await supabase
         .from('websites')
         .upsert({
@@ -58,12 +76,13 @@ serve(async (req) => {
         .single();
 
       if (websiteError) {
-        console.error('Error saving website:', websiteError);
+        console.error('Website upsert error:', websiteError);
         throw websiteError;
       }
       console.log('Website record saved:', website);
 
       // Save page record
+      console.log('Saving page record...');
       const { data: page, error: pageError } = await supabase
         .from('pages')
         .upsert({
@@ -79,12 +98,13 @@ serve(async (req) => {
         .single();
 
       if (pageError) {
-        console.error('Error saving page:', pageError);
+        console.error('Page upsert error:', pageError);
         throw pageError;
       }
       console.log('Page record saved:', page);
 
       // Save page analysis
+      console.log('Saving page analysis...');
       const { error: analysisError } = await supabase
         .from('page_analysis')
         .upsert({
@@ -100,14 +120,14 @@ serve(async (req) => {
         });
 
       if (analysisError) {
-        console.error('Error saving page analysis:', analysisError);
+        console.error('Analysis upsert error:', analysisError);
         throw analysisError;
       }
       console.log('Page analysis saved successfully');
 
     } catch (dbError) {
       console.error('Database operation failed:', dbError);
-      throw new Error(`Failed to save data: ${dbError.message}`);
+      throw new Error(`Database operation failed: ${dbError.message}`);
     }
 
     const analysisResult = {
@@ -115,7 +135,7 @@ serve(async (req) => {
       outboundSuggestions: suggestions
     };
 
-    console.log('Analysis completed successfully:', analysisResult);
+    console.log('Analysis completed successfully');
     return new Response(
       JSON.stringify(analysisResult),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
