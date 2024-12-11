@@ -26,11 +26,11 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
             logger.error("No HuggingFace API key found!")
             return {}
 
-        # Prepare content summary for context (first paragraph or two)
+        # Get first few paragraphs for context
         content_summary = ". ".join(sent_tokenize(content)[:3])
         logger.info(f"Using content summary: {content_summary[:200]}...")
 
-        # Photography-specific categories for classification
+        # Photography-specific categories
         categories = [
             "photography equipment",
             "photography technique",
@@ -42,7 +42,6 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
         ]
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # Single batch request for all phrases
             inputs = [
                 f"Content about photography: {content_summary}\nPhrase to evaluate: {phrase}"
                 for phrase in phrases
@@ -63,15 +62,12 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
             )
 
             results = response.json()
-            logger.info(f"Received batch results: {results[:2]}...")  # Log first two results
+            logger.info(f"Received batch results: {results[:2]}...")
 
-            # Process results and assign scores
             scores = {}
             for phrase, result in zip(phrases, results):
                 try:
-                    # Skip if the top category is "irrelevant"
                     if result["labels"][0] != "irrelevant":
-                        # Weight score based on photography relevance
                         scores[phrase] = result["scores"][0]
                         logger.info(f"Phrase '{phrase}' scored {scores[phrase]} for category {result['labels'][0]}")
                 except Exception as e:
@@ -98,38 +94,48 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
         sentences = sent_tokenize(content)
         logger.info(f"Processing {len(sentences)} sentences")
         
-        # Extract potential SEO phrases
-        seo_phrases = []
+        # Extract potential phrases
+        phrases = []
         
         for sentence in sentences:
+            # Tokenize and get POS tags
             tokens = word_tokenize(sentence)
             pos_tags = pos_tag(tokens)
             
-            # Look for noun phrases and technical terms
-            for i in range(len(pos_tags) - 1):
-                # Two word phrases (noun phrases, technical terms)
+            # Extract phrases based on POS patterns
+            for i in range(len(pos_tags) - 2):
+                # Two-word phrases (noun phrases, technical terms)
                 if (pos_tags[i][1].startswith(('JJ', 'NN', 'VB')) and 
                     pos_tags[i+1][1].startswith('NN')):
                     
                     phrase = f"{pos_tags[i][0].lower()} {pos_tags[i+1][0].lower()}"
                     if not any(word in stop_words for word in phrase.split()):
-                        seo_phrases.append(phrase)
+                        phrases.append(phrase)
                 
-                # Three word phrases (more specific terms)
-                if (i < len(pos_tags) - 2 and
-                    pos_tags[i][1].startswith(('JJ', 'NN')) and 
+                # Three-word phrases
+                if (pos_tags[i][1].startswith(('JJ', 'NN')) and 
                     pos_tags[i+1][1].startswith('NN') and 
                     pos_tags[i+2][1].startswith('NN')):
                     
                     phrase = f"{pos_tags[i][0].lower()} {pos_tags[i+1][0].lower()} {pos_tags[i+2][0].lower()}"
                     if not any(word in stop_words for word in phrase.split()):
-                        seo_phrases.append(phrase)
+                        phrases.append(phrase)
+                
+                # Additional three-word patterns
+                if (i < len(pos_tags) - 2 and
+                    pos_tags[i][1].startswith(('JJ', 'NN', 'VB')) and 
+                    pos_tags[i+1][1].startswith(('JJ', 'NN')) and 
+                    pos_tags[i+2][1].startswith('NN')):
+                    
+                    phrase = f"{pos_tags[i][0].lower()} {pos_tags[i+1][0].lower()} {pos_tags[i+2][0].lower()}"
+                    if not any(word in stop_words for word in phrase.split()):
+                        phrases.append(phrase)
         
         # Remove duplicates while preserving order
-        unique_phrases = list(dict.fromkeys(seo_phrases))
+        unique_phrases = list(dict.fromkeys(phrases))
         logger.info(f"Extracted {len(unique_phrases)} unique phrases")
         
-        # Get relevance scores for all phrases in one batch
+        # Get relevance scores
         scores = await analyze_content_relevance(content, unique_phrases)
         logger.info(f"Received scores for {len(scores)} phrases")
         
