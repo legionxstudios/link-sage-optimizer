@@ -15,34 +15,9 @@ serve(async (req) => {
   }
 
   try {
-    // Validate request has a body
-    if (!req.body) {
-      console.error('No request body provided');
-      return new Response(
-        JSON.stringify({ error: 'Request body is required' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    // Parse request body
-    let requestData;
-    try {
-      const text = await req.text();
-      console.log('Raw request body:', text);
-      requestData = JSON.parse(text);
-    } catch (error) {
-      console.error('Failed to parse request body:', error);
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
+    // Get the request body as a JSON object directly
+    const requestData = await req.json();
+    console.log('Received request data:', requestData);
 
     const { url } = requestData;
     console.log('Starting analysis for:', url);
