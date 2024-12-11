@@ -42,7 +42,7 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": "gpt-4",  # Changed from gpt-4o-mini to gpt-4
                     "messages": [
                         {
                             "role": "system",
@@ -80,8 +80,7 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
                 return {}
 
             result = response.json()
-            logger.info("Received OpenAI response")
-            logger.info(f"OpenAI response: {result}")
+            logger.info(f"OpenAI API Response: {result}")
 
             try:
                 # Extract the JSON from the response content
