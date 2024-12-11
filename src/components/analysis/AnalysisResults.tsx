@@ -3,6 +3,8 @@ import { LinkSuggestions } from "./LinkSuggestions";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { AnalysisResponse } from "@/services/crawlerService";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AnalysisResultsProps {
   results: AnalysisResponse;
@@ -10,6 +12,32 @@ interface AnalysisResultsProps {
 
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
   const { keywords, outboundSuggestions } = results;
+
+  useEffect(() => {
+    const fetchStoredAnalysis = async () => {
+      // Subscribe to changes in the page_analysis table
+      const channel = supabase
+        .channel('page_analysis_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'page_analysis'
+          },
+          (payload) => {
+            console.log('Database change received:', payload);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    };
+
+    fetchStoredAnalysis();
+  }, []);
 
   return (
     <motion.div

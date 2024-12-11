@@ -22,20 +22,42 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
-    const { data, error } = await supabase.functions.invoke('analyze', {
+    // First analyze the page using our edge function
+    const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze', {
       body: { url }
     });
 
-    if (error) {
-      console.error("Analysis error:", error);
-      throw new Error(error.message);
+    if (analysisError) {
+      console.error("Analysis error:", analysisError);
+      throw new Error(analysisError.message);
     }
 
-    console.log("Raw API response:", data);
+    console.log("Raw API response:", analysisData);
+
+    // Store the analysis results in the database
+    const { error: dbError } = await supabase
+      .from('page_analysis')
+      .upsert({
+        url,
+        title: analysisData.title,
+        content: analysisData.content,
+        detected_themes: analysisData.themes,
+        main_keywords: analysisData.keywords?.exact_match || [],
+        seo_keywords: analysisData.keywords || {},
+        suggestions: analysisData.outboundSuggestions,
+        created_at: new Date().toISOString()
+      }, {
+        onConflict: 'url'
+      });
+
+    if (dbError) {
+      console.error("Error storing analysis:", dbError);
+      // Continue anyway since we have the analysis results
+    }
 
     return {
-      keywords: data.keywords || { exact_match: [], broad_match: [], related_match: [] },
-      outboundSuggestions: Array.isArray(data.outboundSuggestions) ? data.outboundSuggestions : []
+      keywords: analysisData.keywords || { exact_match: [], broad_match: [], related_match: [] },
+      outboundSuggestions: Array.isArray(analysisData.outboundSuggestions) ? analysisData.outboundSuggestions : []
     };
   } catch (error) {
     console.error("Error in page analysis:", error);
