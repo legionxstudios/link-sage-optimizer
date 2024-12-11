@@ -21,6 +21,7 @@ serve(async (req) => {
     try {
       parsedUrl = new URL(url);
     } catch (e) {
+      console.error('Invalid URL provided:', e);
       return new Response(
         JSON.stringify({ error: 'Invalid URL provided' }),
         { 
@@ -34,26 +35,68 @@ serve(async (req) => {
     console.log(`Processing domain: ${domain}`);
     
     // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    // Create or get website record
-    const { data: website, error: websiteError } = await supabase
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase credentials');
+      throw new Error('Missing required environment variables');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    console.log('Supabase client initialized');
+
+    // First check if website exists
+    console.log('Checking for existing website record...');
+    const { data: existingWebsite, error: fetchError } = await supabase
       .from('websites')
-      .upsert({
-        domain,
-        last_crawled_at: new Date().toISOString()
-      }, {
-        onConflict: 'domain'
-      })
       .select()
+      .eq('domain', domain)
       .single();
 
-    if (websiteError) {
-      console.error('Error creating website:', websiteError);
-      throw new Error('Failed to create website record');
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Error fetching website:', fetchError);
+      throw new Error(`Database error: ${fetchError.message}`);
     }
+
+    let website;
+    if (existingWebsite) {
+      console.log('Found existing website, updating last_crawled_at');
+      const { data: updatedWebsite, error: updateError } = await supabase
+        .from('websites')
+        .update({ last_crawled_at: new Date().toISOString() })
+        .eq('id', existingWebsite.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating website:', updateError);
+        throw new Error(`Failed to update website: ${updateError.message}`);
+      }
+      website = updatedWebsite;
+    } else {
+      console.log('Creating new website record');
+      const { data: newWebsite, error: createError } = await supabase
+        .from('websites')
+        .insert([{
+          domain,
+          last_crawled_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Error creating website:', createError);
+        throw new Error(`Failed to create website: ${createError.message}`);
+      }
+      website = newWebsite;
+    }
+
+    if (!website) {
+      throw new Error('Failed to get website record');
+    }
+
+    console.log('Successfully got website record:', website);
 
     // Initialize crawl state
     const visited = new Set<string>();
@@ -71,16 +114,25 @@ serve(async (req) => {
       try {
         console.log(`Crawling ${currentUrl}`);
         const response = await fetch(currentUrl);
+        if (!response.ok) {
+          console.warn(`Failed to fetch ${currentUrl}: ${response.status}`);
+          continue;
+        }
+
         const html = await response.text();
         const doc = new DOMParser().parseFromString(html, 'text/html');
 
-        if (!doc) continue;
+        if (!doc) {
+          console.warn(`Failed to parse HTML for ${currentUrl}`);
+          continue;
+        }
 
         // Extract page content
         const title = doc.querySelector('title')?.textContent || '';
         const content = extractContent(doc);
 
         // Save page
+        console.log(`Saving page: ${currentUrl}`);
         const { data: page, error: pageError } = await supabase
           .from('pages')
           .upsert({
@@ -100,6 +152,8 @@ serve(async (req) => {
           continue;
         }
 
+        console.log(`Successfully saved page: ${currentUrl}`);
+
         // Process links
         const links = doc.querySelectorAll('a[href]');
         for (const link of links) {
@@ -115,7 +169,7 @@ serve(async (req) => {
             }
 
             // Save link
-            await supabase
+            const { error: linkError } = await supabase
               .from('links')
               .insert({
                 source_page_id: page.id,
@@ -123,6 +177,10 @@ serve(async (req) => {
                 context: extractLinkContext(link),
                 is_internal: isInternal
               });
+
+            if (linkError) {
+              console.error(`Error saving link ${href}:`, linkError);
+            }
 
           } catch (e) {
             console.error(`Error processing link ${href}:`, e);
@@ -137,6 +195,7 @@ serve(async (req) => {
       }
     }
 
+    console.log('Crawl completed successfully');
     return new Response(
       JSON.stringify({
         success: true,
