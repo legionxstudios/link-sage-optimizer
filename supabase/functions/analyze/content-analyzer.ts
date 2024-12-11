@@ -12,7 +12,10 @@ export async function extractContent(url: string) {
 
   const title = doc.querySelector('title')?.textContent || '';
   const mainContent = extractMainContent(doc);
+  console.log('Extracted content length:', mainContent.length);
+  
   const links = extractLinks(doc);
+  console.log('Extracted links count:', links.length);
 
   return {
     title,
@@ -22,37 +25,74 @@ export async function extractContent(url: string) {
 }
 
 function extractMainContent(doc: Document): string {
+  // Remove non-content elements first
+  ['script', 'style', 'code', 'pre', 'noscript', 'iframe'].forEach(tag => {
+    doc.querySelectorAll(tag).forEach(el => el.remove());
+  });
+
   const contentSelectors = [
     'main',
     'article',
-    '.content',
     '[role="main"]',
+    '.content',
     '.post-content',
-    '.entry-content'
+    '.entry-content',
+    '.article-content',
+    '#content'
   ];
 
-  let content = '';
+  // Find main content container
+  let contentArea = null;
   for (const selector of contentSelectors) {
-    const element = doc.querySelector(selector);
-    if (element) {
-      content = element.textContent || '';
-      break;
+    contentArea = doc.querySelector(selector);
+    if (contentArea) break;
+  }
+
+  // Fallback to body if no content area found
+  if (!contentArea) {
+    contentArea = doc.body;
+  }
+
+  if (!contentArea) return '';
+
+  // Extract text from relevant elements
+  const textElements = contentArea.querySelectorAll(
+    'p, h1, h2, h3, h4, h5, h6, li, td, th, div:not([class*="nav"]):not([class*="menu"]):not([class*="header"]):not([class*="footer"])'
+  );
+
+  const contentParts: string[] = [];
+  textElements.forEach(element => {
+    // Skip elements that are likely navigation or non-content
+    if (element.className && /nav|menu|header|footer|sidebar|comment/.test(element.className)) {
+      return;
     }
-  }
 
-  if (!content) {
-    content = doc.body?.textContent || '';
-  }
+    const text = element.textContent?.trim();
+    if (text && text.length > 0) {
+      contentParts.push(text);
+    }
+  });
 
-  return content.trim();
+  return contentParts.join('\n\n');
 }
 
 function extractLinks(doc: Document) {
-  return Array.from(doc.querySelectorAll('a[href]')).map(link => ({
-    url: link.getAttribute('href'),
-    text: link.textContent?.trim() || '',
-    context: extractLinkContext(link)
-  }));
+  const links = Array.from(doc.querySelectorAll('a[href]'))
+    .map(link => {
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) {
+        return null;
+      }
+
+      return {
+        url: href,
+        text: link.textContent?.trim() || '',
+        context: extractLinkContext(link)
+      };
+    })
+    .filter(link => link !== null);
+
+  return links;
 }
 
 function extractLinkContext(link: Element): string {
@@ -63,10 +103,10 @@ function extractLinkContext(link: Element): string {
   const linkText = link.textContent || '';
   
   const parts = context.split(linkText);
-  if (parts.length < 2) return context;
+  if (parts.length < 2) return context.slice(0, 150);
 
-  const before = parts[0].slice(-50).trim();
-  const after = parts[1].slice(0, 50).trim();
+  const before = parts[0].slice(-75).trim();
+  const after = parts[1].slice(0, 75).trim();
 
   return `${before} [LINK] ${after}`;
 }
