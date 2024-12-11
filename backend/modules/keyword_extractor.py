@@ -24,14 +24,17 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
     try:
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
-            logger.error("No OpenAI API key found!")
+            logger.error("No OpenAI API key found in environment!")
             return {}
 
+        logger.info("Starting OpenAI API request with key length: " + str(len(api_key)))
+        
         # Get first few paragraphs for context
         content_summary = ". ".join(sent_tokenize(content)[:3])
         logger.info(f"Using content summary: {content_summary[:200]}...")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
+            logger.info("Making OpenAI API request...")
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
@@ -68,6 +71,13 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
                     ]
                 }
             )
+            
+            logger.info(f"OpenAI API Response Status: {response.status_code}")
+            logger.info(f"OpenAI API Response Headers: {response.headers}")
+            
+            if response.status_code != 200:
+                logger.error(f"OpenAI API Error Response: {response.text}")
+                return {}
 
             result = response.json()
             logger.info("Received OpenAI response")
@@ -81,10 +91,12 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
                 return scores
             except Exception as e:
                 logger.error(f"Error parsing OpenAI response: {e}")
+                logger.error(f"Raw response content: {content}")
                 return {}
 
     except Exception as e:
         logger.error(f"Error in content relevance analysis: {e}")
+        logger.error(f"Full error details: {str(e)}")
         return {}
 
 def extract_keywords(content: str) -> Dict[str, List[str]]:
