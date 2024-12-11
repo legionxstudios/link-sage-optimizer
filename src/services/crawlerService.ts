@@ -1,28 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export interface PageContent {
-  url: string;
-  title: string;
-  content: string;
-  mainKeywords: string[];
-  internalLinksCount: number;
-  externalLinksCount: number;
-}
-
 export interface LinkSuggestion {
-  sourceUrl: string;
-  targetUrl: string;
   suggestedAnchorText: string;
+  context: string;
   matchType: string;
   relevanceScore: number;
-  context: string;
 }
 
 export interface AnalysisResponse {
-  pageContents: PageContent[];
+  keywords: {
+    exact_match: string[];
+    broad_match: string[];
+    related_match: string[];
+  };
   outboundSuggestions: LinkSuggestion[];
-  inboundSuggestions: LinkSuggestion[];
-  linkScore: number;
 }
 
 export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
@@ -40,39 +31,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     console.log("Raw API response:", data);
 
-    // Ensure the response matches our expected format
-    const response: AnalysisResponse = {
-      pageContents: data.pageContents || [],
-      outboundSuggestions: Array.isArray(data.outboundSuggestions) ? data.outboundSuggestions : [],
-      inboundSuggestions: Array.isArray(data.inboundSuggestions) ? data.inboundSuggestions : [],
-      linkScore: data.linkScore || 0
+    return {
+      keywords: data.keywords || { exact_match: [], broad_match: [], related_match: [] },
+      outboundSuggestions: Array.isArray(data.outboundSuggestions) ? data.outboundSuggestions : []
     };
-
-    console.log("Processed analysis results:", response);
-    return response;
   } catch (error) {
     console.error("Error in page analysis:", error);
-    throw error;
-  }
-};
-
-export const crawlWebsite = async (url: string, maxPages: number = 50): Promise<{ success: boolean; pagesProcessed: number; domain: string }> => {
-  console.log("Starting website crawl for:", url);
-  
-  try {
-    const { data, error } = await supabase.functions.invoke('crawl', {
-      body: { url, maxPages }
-    });
-
-    if (error) {
-      console.error("Crawl error:", error);
-      throw new Error(error.message);
-    }
-
-    console.log("Crawl completed:", data);
-    return data;
-  } catch (error) {
-    console.error("Error in website crawl:", error);
     throw error;
   }
 };
