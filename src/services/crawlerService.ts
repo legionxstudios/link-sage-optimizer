@@ -5,6 +5,8 @@ export interface LinkSuggestion {
   context: string;
   matchType: string;
   relevanceScore: number;
+  targetUrl?: string;
+  targetTitle?: string;
 }
 
 export interface AnalysisResponse {

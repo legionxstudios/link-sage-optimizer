@@ -2,6 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { LinkSuggestion } from "@/services/crawlerService";
+import { ExternalLink } from "lucide-react";
 
 interface LinkSuggestionsProps {
   suggestions: LinkSuggestion[];
@@ -27,7 +28,7 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
         <TableHeader>
           <TableRow>
             <TableHead>Suggested Anchor Text</TableHead>
-            <TableHead>Match Type</TableHead>
+            <TableHead>Target Page</TableHead>
             <TableHead>Relevance</TableHead>
             <TableHead>Suggested Context</TableHead>
           </TableRow>
@@ -39,7 +40,19 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
                 <Badge variant="outline">{suggestion.suggestedAnchorText}</Badge>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{suggestion.matchType}</Badge>
+                {suggestion.targetUrl ? (
+                  <a 
+                    href={suggestion.targetUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
+                  >
+                    {suggestion.targetTitle || 'View page'}
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">External link</span>
+                )}
               </TableCell>
               <TableCell>
                 <span className={getRelevanceColor(suggestion.relevanceScore)}>
