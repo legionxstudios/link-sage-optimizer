@@ -15,6 +15,7 @@ async def analyze_content(content: str) -> Dict[str, Any]:
     """Analyze content using OpenAI function calling to extract key phrases."""
     try:
         logger.info("Starting content analysis with OpenAI function calling")
+        logger.info(f"Content length: {len(content)}")
         
         function_definition = {
             "name": "extract_key_phrases",
@@ -37,7 +38,7 @@ async def analyze_content(content: str) -> Dict[str, Any]:
         try:
             logger.info("Sending request to OpenAI")
             response = await openai.ChatCompletion.acreate(
-                model="gpt-4",
+                model="gpt-4o",  # Updated to use correct model name
                 messages=[
                     {
                         "role": "system",
@@ -53,6 +54,7 @@ async def analyze_content(content: str) -> Dict[str, Any]:
             )
             
             logger.info("Received response from OpenAI")
+            logger.debug(f"OpenAI response: {response}")
             
             if not response.choices:
                 logger.error("No choices in OpenAI response")
@@ -66,6 +68,7 @@ async def analyze_content(content: str) -> Dict[str, Any]:
                     
                 arguments = json.loads(function_call.arguments)
                 key_phrases = arguments.get('key_phrases', [])
+                logger.info(f"Extracted {len(key_phrases)} key phrases")
                 
                 # Convert key phrases to link suggestions
                 suggestions = []
@@ -100,6 +103,9 @@ async def generate_link_suggestions(
     """Generate link suggestions based on content analysis."""
     try:
         logger.info("Starting link suggestion generation")
+        logger.info(f"Content length: {len(content)}")
+        logger.info(f"Keywords: {keywords}")
+        logger.info(f"Existing links count: {len(existing_links)}")
         
         # Get suggestions from OpenAI
         suggestions = await analyze_content(content)
