@@ -1,5 +1,12 @@
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
+interface Link {
+  url: string;
+  text: string;
+  context: string;
+  is_internal: boolean;
+}
+
 export async function extractContent(url: string) {
   console.log('Extracting content from:', url);
   const response = await fetch(url);
@@ -14,7 +21,7 @@ export async function extractContent(url: string) {
   const mainContent = extractMainContent(doc);
   console.log('Extracted content length:', mainContent.length);
   
-  const links = extractLinks(doc);
+  const links = extractLinks(doc, url);
   console.log('Extracted links count:', links.length);
 
   return {
@@ -76,7 +83,8 @@ function extractMainContent(doc: Document): string {
   return contentParts.join('\n\n');
 }
 
-function extractLinks(doc: Document) {
+function extractLinks(doc: Document, baseUrl: string): Link[] {
+  const domain = new URL(baseUrl).hostname;
   const links = Array.from(doc.querySelectorAll('a[href]'))
     .map(link => {
       const href = link.getAttribute('href');
@@ -84,13 +92,22 @@ function extractLinks(doc: Document) {
         return null;
       }
 
-      return {
-        url: href,
-        text: link.textContent?.trim() || '',
-        context: extractLinkContext(link)
-      };
+      try {
+        const absoluteUrl = new URL(href, baseUrl).toString();
+        const isInternal = new URL(absoluteUrl).hostname === domain;
+
+        return {
+          url: absoluteUrl,
+          text: link.textContent?.trim() || '',
+          context: extractLinkContext(link),
+          is_internal: isInternal
+        };
+      } catch (e) {
+        console.error(`Error processing link ${href}:`, e);
+        return null;
+      }
     })
-    .filter(link => link !== null);
+    .filter((link): link is Link => link !== null);
 
   return links;
 }

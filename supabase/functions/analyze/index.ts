@@ -26,10 +26,11 @@ serve(async (req) => {
 
     // Extract content and analyze
     console.log('Extracting content from URL:', url);
-    const { title, content } = await extractContent(url);
+    const { title, content, links } = await extractContent(url);
     console.log('Content extracted:', { 
       title, 
       contentLength: content.length,
+      linksCount: links?.length || 0,
       contentPreview: content.substring(0, 100) + '...' 
     });
 
@@ -102,6 +103,28 @@ serve(async (req) => {
         throw pageError;
       }
       console.log('Page record saved:', page);
+
+      // Process and save links
+      if (links && links.length > 0) {
+        console.log('Processing links...');
+        const linkRecords = links.map(link => ({
+          source_page_id: page.id,
+          anchor_text: link.text,
+          context: link.context,
+          is_internal: link.is_internal
+        }));
+
+        const { error: linksError } = await supabase
+          .from('links')
+          .upsert(linkRecords);
+
+        if (linksError) {
+          console.error('Error saving links:', linksError);
+          // Don't throw here, continue with analysis
+        } else {
+          console.log(`Successfully saved ${linkRecords.length} links`);
+        }
+      }
 
       // Save page analysis
       console.log('Saving page analysis...');
