@@ -10,38 +10,48 @@ logger = logging.getLogger(__name__)
 async def analyze_content(content: str) -> Dict[str, Any]:
     """Analyze the full content using OpenAI API."""
     try:
+        logger.info("Starting content analysis with OpenAI")
         async with httpx.AsyncClient(timeout=30.0) as client:
+            payload = {
+                "model": "gpt-4",  # Fixed model name
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": """You are an expert content analyzer. For the given content:
+                        1. Identify the main topics and themes
+                        2. Suggest specific areas where external references would add value
+                        3. Return your analysis in a clear, structured format"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Analyze this content and suggest link opportunities: {content[:2000]}"
+                    }
+                ]
+            }
+            
+            logger.info(f"Sending request to OpenAI with payload: {payload}")
+            
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"},
-                json={
-                    "model": "gpt-4o-mini",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": """You are an expert content analyzer. Analyze the content and determine:
-                            1. The main content type (technical guide, product review, tutorial, etc.)
-                            2. Key topics that would benefit from external references
-                            3. The target audience level (beginner, intermediate, expert)"""
-                        },
-                        {
-                            "role": "user",
-                            "content": f"Analyze this content: {content[:2000]}"
-                        }
-                    ]
-                }
+                json=payload
             )
             
             result = response.json()
-            logger.info(f"Content analysis result: {result}")
+            logger.info(f"Received response from OpenAI: {result}")
             
             if "error" in result:
                 logger.error(f"OpenAI API error: {result['error']}")
                 return {"content_type": "article", "relevance_scores": {}}
             
+            if not result.get('choices'):
+                logger.error("No choices in OpenAI response")
+                return {"content_type": "article", "relevance_scores": {}}
+                
             analysis = result['choices'][0]['message']['content']
+            logger.info(f"Analysis from OpenAI: {analysis}")
             
-            # Parse the analysis to extract content type and scores
+            # Define content types and their base relevance scores
             content_types = {
                 "technical guide": 0.9,
                 "tutorial": 0.85,
@@ -63,6 +73,8 @@ async def analyze_content(content: str) -> Dict[str, Any]:
                         detected_type = content_type
                         max_score = base_score
             
+            logger.info(f"Detected content type: {detected_type} with score: {max_score}")
+            
             return {
                 "content_type": detected_type,
                 "relevance_scores": {
@@ -72,7 +84,7 @@ async def analyze_content(content: str) -> Dict[str, Any]:
             }
             
     except Exception as e:
-        logger.error(f"Error analyzing content with OpenAI: {e}")
+        logger.error(f"Error analyzing content with OpenAI: {str(e)}", exc_info=True)
         return {"content_type": "article", "relevance_scores": {}}
 
 async def generate_link_suggestions(
@@ -156,5 +168,5 @@ async def generate_link_suggestions(
         return {'outboundSuggestions': suggestions[:10]}  # Limit to top 10 suggestions
         
     except Exception as e:
-        logger.error(f"Error generating suggestions: {e}")
+        logger.error(f"Error generating suggestions: {str(e)}", exc_info=True)
         return {'outboundSuggestions': []}
