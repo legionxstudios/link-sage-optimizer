@@ -30,11 +30,26 @@ serve(async (req) => {
     const domain = urlObj.hostname;
     console.log('Domain:', domain);
 
-    // Get or create website
-    let website = await getOrCreateWebsite(domain);
+    // First, ensure website exists in database
+    const { data: website, error: websiteError } = await supabase
+      .from('websites')
+      .upsert({
+        domain: domain,
+        last_crawled_at: new Date().toISOString()
+      }, {
+        onConflict: 'domain'
+      })
+      .select()
+      .single();
+
+    if (websiteError) {
+      console.error('Error creating/updating website:', websiteError);
+      throw new Error(`Failed to create/update website: ${websiteError.message}`);
+    }
+
     console.log('Website record:', website);
 
-    // Save the page content and analysis
+    // Fetch and parse the page content
     const response = await fetch(url);
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -48,18 +63,42 @@ serve(async (req) => {
     const sourceContent = mainContent ? mainContent.textContent : doc.body.textContent;
     const sourceTitle = doc.querySelector('title')?.textContent || '';
     
-    // Save page analysis
+    // Save page in pages table first
+    const { data: page, error: pageError } = await supabase
+      .from('pages')
+      .upsert({
+        website_id: website.id,
+        url: url,
+        title: sourceTitle,
+        content: sourceContent,
+        last_crawled_at: new Date().toISOString()
+      }, {
+        onConflict: 'url'
+      })
+      .select()
+      .single();
+
+    if (pageError) {
+      console.error('Error saving page:', pageError);
+      throw new Error(`Failed to save page: ${pageError.message}`);
+    }
+
+    console.log('Saved page:', page);
+
+    // Extract keywords and save analysis
     const sourceKeywords = extractKeywords(sourceContent || '');
     console.log('Extracted keywords:', sourceKeywords);
 
     const { data: pageAnalysis, error: analysisError } = await supabase
       .from('page_analysis')
-      .insert({
+      .upsert({
         url: url,
         title: sourceTitle,
         content: sourceContent,
         main_keywords: sourceKeywords,
         created_at: new Date().toISOString()
+      }, {
+        onConflict: 'url'
       })
       .select()
       .single();
@@ -71,7 +110,7 @@ serve(async (req) => {
 
     console.log('Saved page analysis:', pageAnalysis);
 
-    // Fetch other pages from the same website
+    // Fetch other pages from the same website for suggestions
     const { data: pages, error: pagesError } = await supabase
       .from('pages')
       .select('id, url, title, content')
@@ -88,14 +127,11 @@ serve(async (req) => {
     
     if (pages) {
       for (const page of pages) {
-        // Calculate content similarity
         const pageKeywords = extractKeywords(page.content || '');
         const similarityScore = calculateSimilarity(sourceKeywords, pageKeywords);
-        
-        // Find relevant context for the link
         const context = findLinkContext(sourceContent || '', page.title || '', pageKeywords);
         
-        if (similarityScore > 0.2 && context) { // Adjust threshold as needed
+        if (similarityScore > 0.2 && context) {
           suggestions.push({
             suggestedAnchorText: page.title,
             context: context,
@@ -108,9 +144,7 @@ serve(async (req) => {
       }
     }
 
-    // Sort suggestions by relevance score
     suggestions.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
     console.log('Generated suggestions:', suggestions);
 
     return new Response(
@@ -120,7 +154,7 @@ serve(async (req) => {
           broad_match: sourceKeywords.slice(5, 10),
           related_match: sourceKeywords.slice(10, 15)
         },
-        outboundSuggestions: suggestions.slice(0, 5) // Return top 5 suggestions
+        outboundSuggestions: suggestions.slice(0, 5)
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
