@@ -3,7 +3,6 @@ import { extractContent } from "./content-analyzer.ts"
 import { extractKeywords } from "./keyword-extractor.ts"
 import { generateSEOSuggestions } from "./modules/suggestion-generator.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.3"
-import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,92 +41,74 @@ serve(async (req) => {
       .eq('domain', domain)
       .single()
 
-    // If domain hasn't been crawled or was crawled more than a week ago, trigger crawl
+    // If domain hasn't been crawled or was crawled more than a week ago
     if (!existingWebsite || 
         !existingWebsite.last_crawled_at || 
         new Date(existingWebsite.last_crawled_at).getTime() < Date.now() - 7 * 24 * 60 * 60 * 1000) {
-      console.log('Domain needs crawling, initiating crawl...')
+      console.log('Domain needs indexing, checking for sitemap...')
       
-      // Trigger crawl function
-      const { data: crawlResponse, error: crawlError } = await supabase.functions.invoke('crawl', {
-        body: { url, maxPages: 50 }
-      })
+      // Try to find sitemap
+      const sitemapUrls = [
+        `https://${domain}/sitemap.xml`,
+        `https://${domain}/sitemap_index.xml`,
+        `https://${domain}/wp-sitemap.xml`
+      ]
 
-      if (crawlError) {
-        console.error('Error during crawl:', crawlError)
-        throw new Error(`Crawl failed: ${crawlError.message}`)
+      let sitemapFound = false
+      for (const sitemapUrl of sitemapUrls) {
+        try {
+          const response = await fetch(sitemapUrl)
+          if (response.ok) {
+            console.log('Found sitemap at:', sitemapUrl)
+            
+            // Process sitemap
+            const { data: processingResponse, error: processingError } = await supabase.functions.invoke('process-sitemap', {
+              body: { sitemapUrl }
+            })
+
+            if (processingError) {
+              console.error('Error processing sitemap:', processingError)
+            } else {
+              console.log('Sitemap processed:', processingResponse)
+              sitemapFound = true
+              break
+            }
+          }
+        } catch (e) {
+          console.log(`No sitemap found at ${sitemapUrl}`)
+        }
       }
 
-      console.log('Crawl completed:', crawlResponse)
-    } else {
-      console.log('Domain already crawled recently')
-    }
-
-    // Extract content and analyze
-    console.log('Extracting content from URL:', url)
-    const { title, content, links } = await extractContent(url)
-    console.log('Content extracted:', { 
-      title, 
-      contentLength: content.length,
-      linksCount: links?.length || 0,
-      contentPreview: content.substring(0, 100) + '...' 
-    })
-
-    if (!content || content.length < 10) {
-      console.error('Extracted content is too short or empty')
-      throw new Error('Could not extract meaningful content from URL')
-    }
-
-    console.log('Extracting keywords...')
-    const keywords = await extractKeywords(content)
-    console.log('Keywords extracted:', keywords)
-
-    if (!keywords.exact_match || keywords.exact_match.length === 0) {
-      console.warn('No exact match keywords found')
-    }
-
-    console.log('Generating SEO suggestions...')
-    const suggestions = await generateSEOSuggestions(content, keywords.exact_match, url)
-    console.log('Generated suggestions:', suggestions)
-
-    // Save analysis results
-    try {
-      console.log('Saving analysis results...')
-      const { error: analysisError } = await supabase
-        .from('page_analysis')
-        .upsert({
-          url: url,
-          title: title,
-          content: content,
-          main_keywords: keywords.exact_match,
-          seo_keywords: keywords,
-          suggestions: suggestions,
-          created_at: new Date().toISOString()
-        }, {
-          onConflict: 'url'
+      // Fallback to crawling if no sitemap found
+      if (!sitemapFound) {
+        console.log('No sitemap found, initiating crawl...')
+        const { data: crawlResponse, error: crawlError } = await supabase.functions.invoke('crawl', {
+          body: { url, maxPages: 50 }
         })
 
-      if (analysisError) {
-        console.error('Error saving analysis:', analysisError)
-        throw analysisError
+        if (crawlError) {
+          console.error('Error during crawl:', crawlError)
+          throw new Error(`Crawl failed: ${crawlError.message}`)
+        }
+
+        console.log('Crawl completed:', crawlResponse)
       }
-      console.log('Analysis results saved successfully')
-
-    } catch (dbError) {
-      console.error('Database operation failed:', dbError)
-      throw new Error(`Database operation failed: ${dbError.message}`)
+    } else {
+      console.log('Domain already indexed recently')
     }
 
-    const analysisResult = {
-      keywords,
-      outboundSuggestions: suggestions
-    }
+    const mainContent = await extractContent(url);
+    const keywords = await extractKeywords(mainContent.content);
+    const suggestions = await generateSEOSuggestions(mainContent.content, keywords.exact_match, url);
 
-    console.log('Analysis completed successfully')
     return new Response(
-      JSON.stringify(analysisResult),
+      JSON.stringify({
+        mainContent,
+        keywords,
+        suggestions
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    );
 
   } catch (error) {
     console.error('Error in analysis:', error)
