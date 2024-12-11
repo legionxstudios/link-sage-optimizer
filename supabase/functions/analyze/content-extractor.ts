@@ -3,32 +3,37 @@ import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts
 export async function extractContent(url: string) {
   console.log('Extracting content from:', url);
   
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; AnalyzerBot/1.0)'
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; AnalyzerBot/1.0)'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
     }
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    if (!doc) {
+      throw new Error('Failed to parse webpage');
+    }
+
+    const title = doc.querySelector('title')?.textContent || '';
+    const mainContent = extractMainContent(doc);
+    const links = extractLinks(doc);
+
+    return {
+      title,
+      content: mainContent,
+      links
+    };
+  } catch (error) {
+    console.error('Error extracting content:', error);
+    throw error;
   }
-
-  const html = await response.text();
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-
-  if (!doc) {
-    throw new Error('Failed to parse webpage');
-  }
-
-  const title = doc.querySelector('title')?.textContent || '';
-  const mainContent = extractMainContent(doc);
-  const links = extractLinks(doc);
-
-  return {
-    title,
-    content: mainContent,
-    links
-  };
 }
 
 function extractMainContent(doc: Document): string {

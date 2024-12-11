@@ -15,11 +15,46 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
+    // Validate request has a body
+    if (!req.body) {
+      console.error('No request body provided');
+      return new Response(
+        JSON.stringify({ error: 'Request body is required' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Parse request body
+    let requestData;
+    try {
+      const text = await req.text();
+      console.log('Raw request body:', text);
+      requestData = JSON.parse(text);
+    } catch (error) {
+      console.error('Failed to parse request body:', error);
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    const { url } = requestData;
     console.log('Starting analysis for:', url);
 
     if (!url || typeof url !== 'string') {
-      throw new Error('Valid URL is required');
+      return new Response(
+        JSON.stringify({ error: 'Valid URL is required' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Extract content with timeout
@@ -64,7 +99,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: error.message || 'Internal server error',
-        details: error.toString()
+        details: error.toString(),
+        stack: error.stack
       }),
       { 
         status: 500,
