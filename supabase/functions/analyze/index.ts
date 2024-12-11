@@ -35,7 +35,7 @@ serve(async (req) => {
     // Process in parallel for efficiency
     const [keywords, suggestions] = await Promise.all([
       extractKeywords(content),
-      generateSuggestions(content, links)
+      generateSuggestions(content, links, url)
     ]);
 
     const analysisResult = {

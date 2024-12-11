@@ -6,9 +6,9 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function generateSuggestions(content: string, links: any[]) {
+export async function generateSuggestions(content: string, links: any[], url: string) {
   try {
-    console.log('Starting suggestion generation');
+    console.log('Starting suggestion generation for URL:', url);
     const suggestions: LinkSuggestion[] = [];
     const existingUrls = new Set(links.map(link => link.url));
     
@@ -34,7 +34,7 @@ export async function generateSuggestions(content: string, links: any[]) {
     }
     
     // Store the analysis results
-    await storeAnalysisResults(content, themes, keywords, suggestions);
+    await storeAnalysisResults(url, content, themes, keywords, suggestions);
     
     console.log('Generated suggestions:', suggestions);
     return suggestions
@@ -139,11 +139,13 @@ async function generateSEOKeywords(content: string, themes: string[]) {
   }
 }
 
-async function storeAnalysisResults(content: string, themes: string[], keywords: any[], suggestions: LinkSuggestion[]) {
+async function storeAnalysisResults(url: string, content: string, themes: string[], keywords: any[], suggestions: LinkSuggestion[]) {
   try {
+    console.log('Storing analysis results for URL:', url);
     const { error } = await supabase
       .from('page_analysis')
       .insert({
+        url,
         content: content.slice(0, 10000), // Limit content length
         detected_themes: themes,
         seo_keywords: keywords,
