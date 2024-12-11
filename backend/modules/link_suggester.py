@@ -19,16 +19,17 @@ async def analyze_content(content: str) -> Dict[str, Any]:
         
         function_definition = {
             "name": "extract_key_phrases",
-            "description": "Extract 2-3 word key phrases related to the central topics from the provided webpage content.",
+            "description": "Extract ONLY 2-3 word key phrases that represent the main topics from the content. Each phrase must be exactly 2-3 words long.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "key_phrases": {
                         "type": "array",
                         "items": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "A 2-3 word phrase representing a key topic"
                         },
-                        "description": "List of key phrases extracted from the text."
+                        "description": "List of 2-3 word key phrases extracted from the text."
                     }
                 },
                 "required": ["key_phrases"]
@@ -38,15 +39,15 @@ async def analyze_content(content: str) -> Dict[str, Any]:
         try:
             logger.info("Sending request to OpenAI")
             response = await openai.ChatCompletion.acreate(
-                model="gpt-4o",  # Updated to use correct model name
+                model="gpt-4o",
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert at identifying key topics and phrases for SEO interlinking."
+                        "content": "You are an expert at identifying key 2-3 word phrases for SEO interlinking. ONLY return phrases that are exactly 2-3 words long."
                     },
                     {
                         "role": "user",
-                        "content": f"Extract 10 key phrases (each 2-3 words) that represent the main topics of the following content for SEO interlinking:\n\n{content[:2000]}"
+                        "content": f"Extract 10 key phrases (EXACTLY 2-3 words each) that represent the main topics of the following content:\n\n{content[:2000]}\n\nEnsure each phrase is EXACTLY 2-3 words long."
                     }
                 ],
                 functions=[function_definition],
@@ -68,20 +69,15 @@ async def analyze_content(content: str) -> Dict[str, Any]:
                     
                 arguments = json.loads(function_call.arguments)
                 key_phrases = arguments.get('key_phrases', [])
-                logger.info(f"Extracted {len(key_phrases)} key phrases")
                 
-                # Convert key phrases to link suggestions
-                suggestions = []
-                for phrase in key_phrases:
-                    suggestions.append({
-                        "suggestedAnchorText": phrase,
-                        "context": f"Found key phrase: {phrase}",
-                        "matchType": "keyword_based",
-                        "relevanceScore": 0.8  # High confidence since these are main topics
-                    })
+                # Validate phrase length
+                key_phrases = [
+                    phrase for phrase in key_phrases 
+                    if 2 <= len(phrase.split()) <= 3
+                ]
                 
-                logger.info(f"Generated {len(suggestions)} suggestions from key phrases")
-                return suggestions
+                logger.info(f"Extracted {len(key_phrases)} valid key phrases")
+                return key_phrases
                 
             except Exception as e:
                 logger.error(f"Error parsing OpenAI response: {str(e)}")
@@ -100,23 +96,117 @@ async def generate_link_suggestions(
     keywords: Dict[str, List[str]],
     existing_links: List[Dict]
 ) -> Dict[str, List[Dict]]:
-    """Generate link suggestions based on content analysis."""
+    """Generate link suggestions based on content analysis and find relevant target pages."""
     try:
         logger.info("Starting link suggestion generation")
         logger.info(f"Content length: {len(content)}")
         logger.info(f"Keywords: {keywords}")
         logger.info(f"Existing links count: {len(existing_links)}")
         
-        # Get suggestions from OpenAI
-        suggestions = await analyze_content(content)
-        
-        if not suggestions:
-            logger.warning("No suggestions generated")
+        # Get key phrases from OpenAI
+        key_phrases = await analyze_content(content)
+        if not key_phrases:
+            logger.warning("No key phrases generated")
             return {'outboundSuggestions': []}
+            
+        logger.info(f"Generated {len(key_phrases)} key phrases")
         
-        logger.info(f"Generated {len(suggestions)} valid suggestions")
-        return {'outboundSuggestions': suggestions[:10]}  # Limit to top 10
+        # Initialize Supabase client
+        from supabase import create_client
+        supabase = create_client(
+            os.getenv('SUPABASE_URL', ''),
+            os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
+        )
+        
+        suggestions = []
+        
+        # For each key phrase, find relevant pages in our database
+        for phrase in key_phrases:
+            try:
+                # Search for pages containing this phrase in title or content
+                response = await supabase.table('pages').select('url, title, content') \
+                    .or_(f"title.ilike.%{phrase}%,content.ilike.%{phrase}%") \
+                    .limit(3) \
+                    .execute()
+                
+                relevant_pages = response.data
+                logger.info(f"Found {len(relevant_pages)} relevant pages for phrase: {phrase}")
+                
+                # Find relevant context in the content
+                phrase_context = find_phrase_context(content, phrase)
+                
+                # Create suggestions for each relevant page
+                for page in relevant_pages:
+                    suggestions.append({
+                        "suggestedAnchorText": phrase,
+                        "context": phrase_context,
+                        "matchType": "keyword_based",
+                        "relevanceScore": calculate_relevance_score(phrase, page),
+                        "targetUrl": page['url'],
+                        "targetTitle": page['title']
+                    })
+                    
+            except Exception as e:
+                logger.error(f"Error processing phrase {phrase}: {str(e)}")
+                continue
+        
+        # Sort by relevance score and limit to top suggestions
+        suggestions.sort(key=lambda x: x['relevanceScore'], reverse=True)
+        suggestions = suggestions[:10]
+        
+        logger.info(f"Generated {len(suggestions)} final suggestions")
+        return {'outboundSuggestions': suggestions}
         
     except Exception as e:
         logger.error(f"Error generating suggestions: {str(e)}", exc_info=True)
         return {'outboundSuggestions': []}
+
+def find_phrase_context(content: str, phrase: str, context_length: int = 100) -> str:
+    """Find the surrounding context for a phrase in the content."""
+    try:
+        phrase_lower = phrase.lower()
+        content_lower = content.lower()
+        
+        # Find the phrase position
+        pos = content_lower.find(phrase_lower)
+        if pos == -1:
+            return ""
+            
+        # Get surrounding context
+        start = max(0, pos - context_length)
+        end = min(len(content), pos + len(phrase) + context_length)
+        
+        context = content[start:end].strip()
+        # Highlight the phrase
+        context = context.replace(phrase, f"[{phrase}]")
+        
+        return context
+        
+    except Exception as e:
+        logger.error(f"Error finding context: {str(e)}")
+        return ""
+
+def calculate_relevance_score(phrase: str, page: Dict) -> float:
+    """Calculate relevance score based on phrase presence in title and content."""
+    try:
+        score = 0.0
+        phrase_lower = phrase.lower()
+        
+        # Check title
+        if page.get('title'):
+            if phrase_lower in page['title'].lower():
+                score += 0.5
+                
+        # Check content
+        if page.get('content'):
+            content_lower = page['content'].lower()
+            if phrase_lower in content_lower:
+                # Calculate frequency
+                frequency = content_lower.count(phrase_lower)
+                score += min(0.5, frequency * 0.1)  # Cap at 0.5
+                
+        return min(1.0, score)  # Ensure score doesn't exceed 1.0
+        
+    except Exception as e:
+        logger.error(f"Error calculating relevance: {str(e)}")
+        return 0.0
