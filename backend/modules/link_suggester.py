@@ -8,9 +8,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 async def analyze_website_theme(content: str) -> List[str]:
-    """Analyze the main theme/topics of the website content with granular sub-topics."""
+    """Analyze the main theme/topics of the website content."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
+            # Ensure we only use 10 candidate labels as per API requirements
             response = await client.post(
                 "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
                 headers={"Authorization": f"Bearer {os.getenv('HUGGING_FACE_API_KEY')}"},
@@ -18,17 +19,16 @@ async def analyze_website_theme(content: str) -> List[str]:
                     "inputs": content[:1000],  # Analyze first 1000 chars for theme
                     "parameters": {
                         "candidate_labels": [
-                            # Top 10 most relevant photography themes
-                            "digital photography",
-                            "film photography",
-                            "camera equipment",
+                            "photography basics",
+                            "camera gear",
                             "photo editing",
-                            "photography tutorials",
                             "portrait photography",
                             "landscape photography",
                             "street photography",
-                            "photography business",
-                            "photography techniques"
+                            "studio lighting",
+                            "composition tips",
+                            "post processing",
+                            "photography business"
                         ]
                     }
                 }
@@ -37,6 +37,10 @@ async def analyze_website_theme(content: str) -> List[str]:
             result = response.json()
             logger.info(f"Theme analysis result: {result}")
             
+            if "error" in result:
+                logger.error(f"API error: {result['error']}")
+                return ["photography"]
+                
             scores = result.get("scores", [])
             labels = result.get("labels", [])
             
@@ -44,6 +48,7 @@ async def analyze_website_theme(content: str) -> List[str]:
             theme_scores = list(zip(labels, scores))
             theme_scores.sort(key=lambda x: x[1], reverse=True)
             return [theme for theme, score in theme_scores if score > 0.3]
+            
     except Exception as e:
         logger.error(f"Error analyzing website theme: {e}")
         return ["photography"]
@@ -53,7 +58,7 @@ async def generate_link_suggestions(
     keywords: Dict[str, List[str]],
     existing_links: List[Dict]
 ) -> Dict[str, List[Dict]]:
-    """Generate internal link suggestions based on content analysis."""
+    """Generate link suggestions based on content analysis."""
     try:
         # First analyze the website theme
         themes = await analyze_website_theme(content)
@@ -82,11 +87,28 @@ async def generate_link_suggestions(
                 logger.info(f"Generated suggestion: {suggestion}")
                 suggestions.append(suggestion)
         
+        # Add keyword-based suggestions
+        for keyword in keywords.get('exact_match', [])[:5]:  # Limit to top 5 keywords
+            relevant_sentences = [
+                s.strip() for s in sentences 
+                if keyword.lower() in s.lower()
+            ]
+            
+            if relevant_sentences:
+                suggestion = {
+                    'suggestedAnchorText': keyword,
+                    'context': relevant_sentences[0],
+                    'matchType': 'keyword_based',
+                    'relevanceScore': 0.7,  # Medium-high relevance for keyword matches
+                    'keywordMatch': keyword
+                }
+                suggestions.append(suggestion)
+        
         # Sort by relevance and return top suggestions
         suggestions.sort(key=lambda x: x['relevanceScore'], reverse=True)
         logger.info(f"Final suggestions count: {len(suggestions)}")
-        return {'outboundSuggestions': suggestions[:10]}
+        return {'outboundSuggestions': suggestions[:10]}  # Limit to top 10 suggestions
         
     except Exception as e:
         logger.error(f"Error generating suggestions: {e}")
-        raise
+        return {'outboundSuggestions': []}
