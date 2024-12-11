@@ -42,7 +42,7 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4",  # Changed from gpt-4o-mini to gpt-4
+                    "model": "gpt-4o-mini",  # Using the correct model name
                     "messages": [
                         {
                             "role": "system",
