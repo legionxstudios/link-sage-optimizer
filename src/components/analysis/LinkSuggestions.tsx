@@ -27,10 +27,10 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
 
   const getMatchTypeLabel = (type: string) => {
     switch (type) {
-      case 'high_relevance':
-        return <Badge variant="default">High Relevance</Badge>;
-      case 'medium_relevance':
-        return <Badge variant="secondary">Medium Relevance</Badge>;
+      case 'seo_optimized':
+        return <Badge variant="default">SEO Optimized</Badge>;
+      case 'keyword_based':
+        return <Badge variant="secondary">Keyword Based</Badge>;
       default:
         return <Badge variant="outline">{type}</Badge>;
     }
@@ -41,7 +41,8 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Suggested Link</TableHead>
+            <TableHead>Suggested Link Text</TableHead>
+            <TableHead>Target URL</TableHead>
             <TableHead>Match Type</TableHead>
             <TableHead>Relevance</TableHead>
             <TableHead>Context</TableHead>
@@ -52,6 +53,17 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
             <TableRow key={index}>
               <TableCell>
                 <span className="font-medium">{suggestion.suggestedAnchorText}</span>
+              </TableCell>
+              <TableCell>
+                <a 
+                  href={suggestion.targetUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                >
+                  {new URL(suggestion.targetUrl || '#').pathname}
+                  <ExternalLink className="h-4 w-4" />
+                </a>
               </TableCell>
               <TableCell>
                 {getMatchTypeLabel(suggestion.matchType)}

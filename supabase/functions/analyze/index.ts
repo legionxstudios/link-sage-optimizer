@@ -27,9 +27,9 @@ serve(async (req) => {
     const keywords = extractKeywords(content);
     console.log('Keywords extracted:', keywords);
 
-    // Generate link suggestions using content analysis
-    const suggestions = await generateSuggestionsFromContent(content, keywords.exact_match);
-    console.log('Generated suggestions:', suggestions);
+    // Generate SEO-focused link suggestions
+    const suggestions = await generateSEOSuggestions(content, keywords.exact_match, url);
+    console.log('Generated SEO suggestions:', suggestions);
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -80,12 +80,23 @@ serve(async (req) => {
   }
 });
 
-async function generateSuggestionsFromContent(content: string, keywords: string[]) {
+async function generateSEOSuggestions(content: string, keywords: string[], sourceUrl: string) {
   try {
-    // Select top 5 keywords for analysis to stay within API limits
-    const topKeywords = keywords.slice(0, 5);
+    // Define SEO-focused topics for content categorization
+    const seoTopics = [
+      "how-to guide",
+      "tutorial",
+      "case study", 
+      "best practices",
+      "industry trends",
+      "expert tips",
+      "comparison",
+      "review",
+      "guide",
+      "resources"
+    ];
     
-    // Call Hugging Face API for content analysis
+    // Analyze content type using Hugging Face API
     const response = await fetch(
       "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
       {
@@ -97,76 +108,104 @@ async function generateSuggestionsFromContent(content: string, keywords: string[
         body: JSON.stringify({
           inputs: content.substring(0, 2000),
           parameters: {
-            candidate_labels: [
-              "technology",
-              "business",
-              "marketing",
-              "software",
-              "digital",
-              "services",
-              "solutions",
-              "products",
-              "support",
-              "tools"
-            ]
+            candidate_labels: seoTopics
           }
         }),
       }
     );
 
     const result = await response.json();
-    console.log('Content analysis result:', result);
+    console.log('Content type analysis result:', result);
 
     if (result.error) {
       console.error('Hugging Face API error:', result.error);
       return [];
     }
 
-    // Generate suggestions based on content analysis and keywords
+    // Generate SEO-optimized suggestions
     const suggestions = [];
     const sentences = content.split(/[.!?]+/);
 
-    // Add suggestions based on content analysis
+    // Add content type based suggestions
     if (result.scores && result.labels) {
       for (let i = 0; i < result.scores.length; i++) {
-        if (result.scores[i] > 0.5) { // Only use high confidence matches
+        if (result.scores[i] > 0.5) {
+          const contentType = result.labels[i];
           const relevantSentence = sentences.find(s => 
-            s.toLowerCase().includes(result.labels[i].toLowerCase())
+            s.toLowerCase().includes(contentType.toLowerCase()) ||
+            keywords.some(k => s.toLowerCase().includes(k.toLowerCase()))
           );
 
           if (relevantSentence) {
+            // Generate SEO-optimized anchor text based on content type
+            const topKeywords = keywords.slice(0, 2);
+            const anchorText = generateSEOAnchorText(contentType, topKeywords);
+            
             suggestions.push({
-              suggestedAnchorText: result.labels[i],
+              suggestedAnchorText: anchorText,
               context: relevantSentence.trim(),
-              matchType: result.scores[i] > 0.8 ? 'high_relevance' : 'medium_relevance',
-              relevanceScore: result.scores[i]
+              matchType: 'seo_optimized',
+              relevanceScore: result.scores[i],
+              targetUrl: generateTargetUrl(contentType, keywords[0], sourceUrl),
+              contentType: contentType
             });
           }
         }
       }
     }
 
-    // Add keyword-based suggestions
-    for (const keyword of topKeywords) {
+    // Add keyword-based SEO suggestions
+    for (const keyword of keywords.slice(0, 5)) {
       const relevantSentence = sentences.find(s => 
         s.toLowerCase().includes(keyword.toLowerCase())
       );
 
       if (relevantSentence) {
+        const anchorText = generateSEOAnchorText('guide', [keyword]);
         suggestions.push({
-          suggestedAnchorText: keyword,
+          suggestedAnchorText: anchorText,
           context: relevantSentence.trim(),
           matchType: 'keyword_based',
-          relevanceScore: 0.7 // Default score for keyword matches
+          relevanceScore: 0.7,
+          targetUrl: generateTargetUrl('guide', keyword, sourceUrl)
         });
       }
     }
 
-    console.log('Generated suggestions:', suggestions);
+    console.log('Generated SEO suggestions:', suggestions);
     return suggestions;
 
   } catch (error) {
-    console.error('Error generating suggestions:', error);
+    console.error('Error generating SEO suggestions:', error);
     return [];
+  }
+}
+
+function generateSEOAnchorText(contentType: string, keywords: string[]): string {
+  const templates = {
+    'how-to guide': `How to ${keywords.join(' ')}`,
+    'tutorial': `Complete Guide to ${keywords.join(' ')}`,
+    'case study': `${keywords.join(' ')} Case Study`,
+    'best practices': `Best Practices for ${keywords.join(' ')}`,
+    'industry trends': `${keywords.join(' ')} Industry Trends`,
+    'expert tips': `Expert Tips for ${keywords.join(' ')}`,
+    'comparison': `${keywords.join(' ')} Comparison Guide`,
+    'review': `${keywords.join(' ')} Review`,
+    'guide': `Ultimate Guide to ${keywords.join(' ')}`,
+    'resources': `${keywords.join(' ')} Resources`
+  };
+
+  return templates[contentType as keyof typeof templates] || 
+         `Guide to ${keywords.join(' ')}`;
+}
+
+function generateTargetUrl(contentType: string, keyword: string, sourceUrl: string): string {
+  try {
+    const baseUrl = new URL(sourceUrl).origin;
+    const slug = `${contentType.toLowerCase().replace(/\s+/g, '-')}/${keyword.toLowerCase().replace(/\s+/g, '-')}`;
+    return `${baseUrl}/${slug}`;
+  } catch (error) {
+    console.error('Error generating target URL:', error);
+    return '#';
   }
 }
