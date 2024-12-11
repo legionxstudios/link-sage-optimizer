@@ -1,92 +1,69 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.3";
-import { ThemeAnalyzer } from "./theme-analyzer.ts";
+import { logger } from "./logger.ts";
 
 interface LinkSuggestion {
   suggestedAnchorText: string;
   context: string;
-  matchType: string;
   relevanceScore: number;
-  targetUrl?: string;
+  targetUrl: string;
 }
 
-export class SuggestionGenerator {
-  private readonly supabase;
+export async function generateSEOSuggestions(content: string, keywords: string[], sourceUrl: string): Promise<LinkSuggestion[]> {
+  try {
+    logger.info('Generating SEO suggestions for URL:', sourceUrl);
+    
+    // Initialize Supabase client to fetch existing pages
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-  constructor() {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    this.supabase = createClient(supabaseUrl, supabaseKey);
-  }
+    // Get existing pages from the database
+    const { data: existingPages } = await supabase
+      .from('pages')
+      .select('url, title, content')
+      .neq('url', sourceUrl)
+      .limit(20);
 
-  async generateSuggestions(content: string, url: string): Promise<LinkSuggestion[]> {
-    try {
-      console.log('Generating suggestions for URL:', url);
-      
-      // Get themes from content
-      const themes = await ThemeAnalyzer.analyzeThemes(content);
-      console.log('Content themes:', themes);
+    logger.info('Found existing pages:', existingPages?.length);
 
-      // Get related pages from database
-      const relatedPages = await this.findRelatedPages(themes, url);
-      console.log('Found related pages:', relatedPages.length);
+    const suggestions: LinkSuggestion[] = [];
+    const sentences = content.split(/[.!?]+/);
 
-      const suggestions: LinkSuggestion[] = [];
+    // For each keyword found in the content
+    for (const keyword of keywords) {
+      // Find sentences containing this keyword
+      const relevantSentences = sentences.filter(s => 
+        s.toLowerCase().includes(keyword.toLowerCase())
+      );
 
-      // Generate suggestions from related pages
-      for (const page of relatedPages) {
-        if (suggestions.length >= 10) break;
+      if (relevantSentences.length === 0) continue;
 
-        const relevanceScore = this.calculateRelevanceScore(page, themes);
-        if (relevanceScore < 0.3) continue;
+      // Find pages that contain this keyword
+      const relevantPages = existingPages?.filter(page => 
+        page.content?.toLowerCase().includes(keyword.toLowerCase()) ||
+        page.title?.toLowerCase().includes(keyword.toLowerCase())
+      ) || [];
 
-        const context = this.findBestContext(content, page.title);
-        
+      logger.info(`Found ${relevantPages.length} relevant pages for keyword: ${keyword}`);
+
+      // For each relevant page, create a suggestion
+      for (const page of relevantPages) {
+        if (suggestions.length >= 10) break; // Limit to top 10 suggestions
+
         suggestions.push({
-          suggestedAnchorText: page.title,
-          context: context || 'Related content',
-          matchType: 'theme_based',
-          relevanceScore,
+          suggestedAnchorText: keyword,
+          context: relevantSentences[0].trim(),
+          relevanceScore: 0.8, // High score for exact keyword matches
           targetUrl: page.url
         });
       }
-
-      console.log('Generated suggestions:', suggestions.length);
-      return suggestions;
-    } catch (error) {
-      console.error('Error generating suggestions:', error);
-      return [];
-    }
-  }
-
-  private async findRelatedPages(themes: string[], currentUrl: string) {
-    const { data: pages } = await this.supabase
-      .from('pages')
-      .select('url, title, content')
-      .neq('url', currentUrl)
-      .limit(20);
-
-    return pages || [];
-  }
-
-  private calculateRelevanceScore(page: any, themes: string[]): number {
-    let score = 0;
-    const pageContent = (page.content || '').toLowerCase();
-    
-    for (const theme of themes) {
-      if (pageContent.includes(theme.toLowerCase())) {
-        score += 0.2;
-      }
     }
 
-    return Math.min(score, 1);
-  }
-
-  private findBestContext(content: string, keyword: string): string | null {
-    const sentences = content.split(/[.!?]+/);
-    const relevantSentence = sentences.find(s => 
-      s.toLowerCase().includes(keyword.toLowerCase())
-    );
-
-    return relevantSentence?.trim() || null;
+    logger.info('Generated suggestions:', suggestions.length);
+    return suggestions;
+  } catch (error) {
+    logger.error('Error generating SEO suggestions:', error);
+    return [];
   }
 }
