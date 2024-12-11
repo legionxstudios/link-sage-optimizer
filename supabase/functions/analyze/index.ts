@@ -3,6 +3,7 @@ import { extractContent } from "./content-analyzer.ts";
 import { extractKeywords } from "./keyword-extractor.ts";
 import { generateSEOSuggestions } from "./modules/suggestion-generator.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.3";
+import { savePageData } from "./db.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,38 +23,30 @@ serve(async (req) => {
       throw new Error('Valid URL is required');
     }
 
+    // Extract content and analyze
     const { title, content } = await extractContent(url);
     console.log('Content extracted, length:', content.length);
 
     const keywords = await extractKeywords(content);
     console.log('Keywords extracted:', keywords);
 
-    // Generate SEO-focused link suggestions using actual content and URLs
     const suggestions = await generateSEOSuggestions(content, keywords.exact_match, url);
     console.log('Generated SEO suggestions:', suggestions);
 
+    // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { error: dbError } = await supabase
-      .from('page_analysis')
-      .upsert({
-        url,
-        title,
-        content,
-        main_keywords: keywords.exact_match,
-        seo_keywords: keywords,
-        suggestions: suggestions,
-        created_at: new Date().toISOString()
-      }, {
-        onConflict: 'url'
-      });
-
-    if (dbError) {
-      console.error('Error storing analysis:', dbError);
-    }
+    // Save all data to database
+    await savePageData(supabase, {
+      url,
+      title,
+      content,
+      keywords,
+      suggestions
+    });
 
     const analysisResult = {
       keywords,

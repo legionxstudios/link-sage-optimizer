@@ -1,28 +1,78 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+interface PageData {
+  url: string;
+  title: string;
+  content: string;
+  keywords: {
+    exact_match: string[];
+    broad_match: string[];
+    related_match: string[];
+  };
+  suggestions: any[];
+}
 
-export async function savePageAnalysis(url: string, analysis: any) {
+export async function savePageData(
+  supabase: SupabaseClient,
+  data: PageData
+) {
+  console.log('Saving page data for:', data.url);
+
   try {
-    const { error } = await supabase
+    // First, get or create website record
+    const domain = new URL(data.url).hostname;
+    const { data: website, error: websiteError } = await supabase
+      .from('websites')
+      .upsert({
+        domain,
+        last_crawled_at: new Date().toISOString()
+      }, {
+        onConflict: 'domain'
+      })
+      .select()
+      .single();
+
+    if (websiteError) throw websiteError;
+    console.log('Website record saved:', website);
+
+    // Save page record
+    const { data: page, error: pageError } = await supabase
+      .from('pages')
+      .upsert({
+        website_id: website.id,
+        url: data.url,
+        title: data.title,
+        content: data.content,
+        last_crawled_at: new Date().toISOString()
+      }, {
+        onConflict: 'url'
+      })
+      .select()
+      .single();
+
+    if (pageError) throw pageError;
+    console.log('Page record saved:', page);
+
+    // Save page analysis
+    const { error: analysisError } = await supabase
       .from('page_analysis')
       .upsert({
-        url,
-        title: analysis.title,
-        content: analysis.content,
-        main_keywords: analysis.keywords.exact_match,
-        suggestions: analysis.outboundSuggestions,
+        url: data.url,
+        title: data.title,
+        content: data.content,
+        main_keywords: data.keywords.exact_match,
+        seo_keywords: data.keywords,
+        suggestions: data.suggestions,
         created_at: new Date().toISOString()
       }, {
         onConflict: 'url'
       });
 
-    if (error) {
-      console.error('Error saving analysis:', error);
-    }
+    if (analysisError) throw analysisError;
+    console.log('Page analysis saved successfully');
+
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('Error saving page data:', error);
+    throw error;
   }
 }
