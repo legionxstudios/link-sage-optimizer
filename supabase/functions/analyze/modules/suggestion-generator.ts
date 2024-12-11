@@ -1,6 +1,6 @@
-import { ThemeAnalyzer } from './theme-analyzer';
+import { createClient } from '@supabase/supabase-js';
 import { logger } from './logger';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { ThemeAnalyzer } from './theme-analyzer';
 
 interface LinkSuggestion {
   suggestedAnchorText: string;

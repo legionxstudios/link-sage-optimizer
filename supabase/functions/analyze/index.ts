@@ -1,8 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { SuggestionGenerator } from "./modules/suggestion-generator.ts";
 import { extractContent } from "./content-extractor.ts";
 import { extractKeywords } from "./keyword-extractor.ts";
-import { generateSuggestions } from "./suggestion-generator.ts";
-import { savePageAnalysis } from "./db.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +30,7 @@ serve(async (req) => {
     // Process in parallel for efficiency
     const [keywords, suggestions] = await Promise.all([
       extractKeywords(content),
-      generateSuggestions(content, links, url, title)
+      new SuggestionGenerator().generateSuggestions(content, url)
     ]);
 
     const analysisResult = {
@@ -48,7 +47,10 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: error
+      }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

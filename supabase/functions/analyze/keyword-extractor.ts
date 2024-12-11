@@ -25,7 +25,7 @@ export function extractKeywords(content: string) {
   console.log('Extracted keywords count:', sortedWords.length);
   
   return {
-    exact_match: sortedWords.slice(0, 15),  // Increased from 10 to get more relevant terms
+    exact_match: sortedWords.slice(0, 15),
     broad_match: sortedWords.slice(15, 30),
     related_match: sortedWords.slice(30, 45)
   };
