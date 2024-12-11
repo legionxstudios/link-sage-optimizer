@@ -7,6 +7,7 @@ from nltk.tag import pos_tag
 import httpx
 import os
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -19,62 +20,61 @@ except Exception as e:
     logger.error(f"Error downloading NLTK data: {e}")
 
 async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[str, float]:
-    """Analyze content and phrases in a single batch request."""
+    """Analyze content and phrases using OpenAI API for better phrase extraction."""
     try:
-        api_key = os.getenv('HUGGING_FACE_API_KEY')
+        api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
-            logger.error("No HuggingFace API key found!")
+            logger.error("No OpenAI API key found!")
             return {}
 
         # Get first few paragraphs for context
         content_summary = ". ".join(sent_tokenize(content)[:3])
         logger.info(f"Using content summary: {content_summary[:200]}...")
 
-        # Photography-specific categories
-        categories = [
-            "photography equipment",
-            "photography technique",
-            "photo editing",
-            "camera settings",
-            "photography tutorial",
-            "photography business",
-            "irrelevant"
-        ]
-
         async with httpx.AsyncClient(timeout=30.0) as client:
-            inputs = [
-                f"Content about photography: {content_summary}\nPhrase to evaluate: {phrase}"
-                for phrase in phrases
-            ]
-            
-            logger.info(f"Making batch request for {len(phrases)} phrases")
-            
             response = await client.post(
-                "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-                headers={"Authorization": f"Bearer {api_key}"},
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
                 json={
-                    "inputs": inputs,
-                    "parameters": {
-                        "candidate_labels": categories,
-                        "multi_label": False
-                    }
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": """You are a photography SEO expert. Analyze the content and phrases provided, 
+                            and score each phrase based on its relevance to photography and SEO value. 
+                            Focus on technical terms, equipment names, photography techniques, and industry terminology."""
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""Content: {content_summary}\n\nPhrases to evaluate: {json.dumps(phrases)}
+                            
+                            For each phrase, return a relevance score between 0 and 1, where:
+                            1.0 = Highly relevant photography term or concept
+                            0.8 = Important photography-related phrase
+                            0.6 = Generally relevant to photography
+                            0.4 or below = Not very relevant
+                            
+                            Return only a JSON object with phrases as keys and scores as values."""
+                        }
+                    ]
                 }
             )
 
-            results = response.json()
-            logger.info(f"Received batch results: {results[:2]}...")
+            result = response.json()
+            logger.info("Received OpenAI response")
 
-            scores = {}
-            for phrase, result in zip(phrases, results):
-                try:
-                    if result["labels"][0] != "irrelevant":
-                        scores[phrase] = result["scores"][0]
-                        logger.info(f"Phrase '{phrase}' scored {scores[phrase]} for category {result['labels'][0]}")
-                except Exception as e:
-                    logger.error(f"Error processing result for '{phrase}': {e}")
-                    continue
-
-            return scores
+            try:
+                # Extract the JSON from the response content
+                content = result['choices'][0]['message']['content']
+                scores = json.loads(content)
+                logger.info(f"Processed scores for {len(scores)} phrases")
+                return scores
+            except Exception as e:
+                logger.error(f"Error parsing OpenAI response: {e}")
+                return {}
 
     except Exception as e:
         logger.error(f"Error in content relevance analysis: {e}")
@@ -113,15 +113,6 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
                         phrases.append(phrase)
                 
                 # Three-word phrases
-                if (pos_tags[i][1].startswith(('JJ', 'NN')) and 
-                    pos_tags[i+1][1].startswith('NN') and 
-                    pos_tags[i+2][1].startswith('NN')):
-                    
-                    phrase = f"{pos_tags[i][0].lower()} {pos_tags[i+1][0].lower()} {pos_tags[i+2][0].lower()}"
-                    if not any(word in stop_words for word in phrase.split()):
-                        phrases.append(phrase)
-                
-                # Additional three-word patterns
                 if (i < len(pos_tags) - 2 and
                     pos_tags[i][1].startswith(('JJ', 'NN', 'VB')) and 
                     pos_tags[i+1][1].startswith(('JJ', 'NN')) and 
