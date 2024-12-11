@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
-import { extractContent } from "./content-extractor.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 const corsHeaders = {
@@ -27,19 +26,29 @@ serve(async (req) => {
       throw new Error('URL is required');
     }
 
-    // Extract content from the webpage
-    const extractedContent = await extractContent(url);
-    console.log('Content extracted successfully');
+    // Fetch and parse the source page content
+    const response = await fetch(url);
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    
+    if (!doc) {
+      throw new Error('Failed to parse webpage');
+    }
 
-    // Extract keywords using basic NLP
-    const keywords = extractKeywords(extractedContent.content);
-    console.log('Keywords extracted:', keywords);
+    // Extract main content
+    const mainContent = doc.querySelector('main, article, .content, .post-content, [role="main"]');
+    const sourceContent = mainContent ? mainContent.textContent : doc.body.textContent;
+    const sourceTitle = doc.querySelector('title')?.textContent || '';
+    
+    // Extract keywords from source content
+    const sourceKeywords = extractKeywords(sourceContent);
+    console.log('Extracted keywords:', sourceKeywords);
 
     // Get the domain from the URL
     const urlObj = new URL(url);
     const domain = urlObj.hostname;
 
-    // Fetch other pages from the same website
+    // Fetch website ID
     const { data: website } = await supabase
       .from('websites')
       .select('id')
@@ -57,6 +66,7 @@ serve(async (req) => {
       );
     }
 
+    // Fetch other pages from the same website
     const { data: pages, error: pagesError } = await supabase
       .from('pages')
       .select('id, url, title, content')
@@ -68,23 +78,44 @@ serve(async (req) => {
       throw pagesError;
     }
 
-    // Generate internal link suggestions
-    const suggestions = generateInternalLinkSuggestions(
-      extractedContent.content,
-      keywords,
-      pages || []
-    );
+    // Generate suggestions based on content similarity
+    const suggestions = [];
+    
+    if (pages) {
+      for (const page of pages) {
+        // Calculate content similarity
+        const pageKeywords = extractKeywords(page.content || '');
+        const similarityScore = calculateSimilarity(sourceKeywords, pageKeywords);
+        
+        // Find relevant context for the link
+        const context = findLinkContext(sourceContent, page.title || '', pageKeywords);
+        
+        if (similarityScore > 0.2 && context) { // Adjust threshold as needed
+          suggestions.push({
+            suggestedAnchorText: page.title,
+            context: context,
+            matchType: 'internal_link',
+            relevanceScore: similarityScore,
+            targetUrl: page.url,
+            targetTitle: page.title
+          });
+        }
+      }
+    }
+
+    // Sort suggestions by relevance score
+    suggestions.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
     console.log('Generated suggestions:', suggestions);
 
     return new Response(
       JSON.stringify({
         keywords: {
-          exact_match: keywords.slice(0, 5),
-          broad_match: keywords.slice(5, 10),
-          related_match: keywords.slice(10, 15)
+          exact_match: sourceKeywords.slice(0, 5),
+          broad_match: sourceKeywords.slice(5, 10),
+          related_match: sourceKeywords.slice(10, 15)
         },
-        outboundSuggestions: suggestions
+        outboundSuggestions: suggestions.slice(0, 5) // Return top 5 suggestions
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -103,98 +134,66 @@ serve(async (req) => {
 });
 
 function extractKeywords(content: string): string[] {
+  // Split content into words and clean them
   const words = content.toLowerCase()
-    .split(/\W+/)
+    .split(/[\s.,!?;:()\[\]{}"']+/)
     .filter(word => word.length > 3)
-    .reduce((acc: { [key: string]: number }, word) => {
-      acc[word] = (acc[word] || 0) + 1;
-      return acc;
-    }, {});
+    .filter(word => !commonWords.includes(word));
 
-  return Object.entries(words)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 15)
-    .map(([word]) => word);
-}
+  // Count word frequencies
+  const wordFreq: { [key: string]: number } = {};
+  words.forEach(word => {
+    wordFreq[word] = (wordFreq[word] || 0) + 1;
+  });
 
-interface Page {
-  id: string;
-  url: string;
-  title: string;
-  content: string;
-}
-
-function generateInternalLinkSuggestions(
-  sourceContent: string,
-  keywords: string[],
-  pages: Page[]
-): Array<{
-  suggestedAnchorText: string;
-  context: string;
-  matchType: string;
-  relevanceScore: number;
-  targetUrl?: string;
-  targetTitle?: string;
-}> {
-  const suggestions = [];
-
-  // Split source content into paragraphs
-  const paragraphs = sourceContent.split('\n').filter(p => p.trim().length > 0);
-
-  // For each page, check content similarity and keyword matches
-  for (const page of pages) {
-    // Calculate content similarity score
-    const similarityScore = calculateSimilarity(sourceContent, page.content);
-
-    // Find matching keywords in the target page
-    const matchingKeywords = keywords.filter(keyword => 
-      page.content.toLowerCase().includes(keyword.toLowerCase()) ||
-      page.title.toLowerCase().includes(keyword.toLowerCase())
-    );
-
-    if (matchingKeywords.length > 0) {
-      // For each matching keyword, find relevant context in source content
-      for (const keyword of matchingKeywords) {
-        const relevantParagraph = paragraphs.find(p => 
-          p.toLowerCase().includes(keyword.toLowerCase())
-        );
-
-        if (relevantParagraph) {
-          // Calculate final relevance score based on content similarity and keyword presence
-          const relevanceScore = (
-            similarityScore * 0.6 + // Content similarity weight
-            (matchingKeywords.length / keywords.length) * 0.4 // Keyword match weight
-          );
-
-          if (relevanceScore > 0.3) { // Only suggest if relevance is above threshold
-            suggestions.push({
-              suggestedAnchorText: keyword,
-              context: relevantParagraph.substring(0, 200) + '...',
-              matchType: 'internal_link',
-              relevanceScore,
-              targetUrl: page.url,
-              targetTitle: page.title
-            });
-          }
-        }
-      }
+  // Extract phrases (2-3 words)
+  const phrases = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    const twoWordPhrase = `${words[i]} ${words[i + 1]}`;
+    phrases.push(twoWordPhrase);
+    
+    if (i < words.length - 2) {
+      const threeWordPhrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+      phrases.push(threeWordPhrase);
     }
   }
 
-  // Sort by relevance score and return top suggestions
-  return suggestions
-    .sort((a, b) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 5);
+  // Combine single words and phrases, sort by frequency
+  return [...new Set([...Object.keys(wordFreq), ...phrases])];
 }
 
-function calculateSimilarity(text1: string, text2: string): number {
-  // Convert texts to word sets
-  const words1 = new Set(text1.toLowerCase().split(/\W+/).filter(w => w.length > 3));
-  const words2 = new Set(text2.toLowerCase().split(/\W+/).filter(w => w.length > 3));
-
-  // Calculate Jaccard similarity
-  const intersection = new Set([...words1].filter(x => words2.has(x)));
-  const union = new Set([...words1, ...words2]);
-
+function calculateSimilarity(keywords1: string[], keywords2: string[]): number {
+  const set1 = new Set(keywords1);
+  const set2 = new Set(keywords2);
+  
+  const intersection = new Set([...set1].filter(x => set2.has(x)));
+  const union = new Set([...set1, ...set2]);
+  
   return intersection.size / union.size;
 }
+
+function findLinkContext(sourceContent: string, targetTitle: string, targetKeywords: string[]): string | null {
+  // Split source content into sentences
+  const sentences = sourceContent.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  
+  // Look for sentences that contain the target title or keywords
+  for (const sentence of sentences) {
+    const sentenceLower = sentence.toLowerCase();
+    if (
+      sentenceLower.includes(targetTitle.toLowerCase()) ||
+      targetKeywords.some(keyword => sentenceLower.includes(keyword.toLowerCase()))
+    ) {
+      return sentence.trim();
+    }
+  }
+  
+  return null;
+}
+
+const commonWords = [
+  'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
+  'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
+  'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
+  'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their', 'what',
+  'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me'
+];
