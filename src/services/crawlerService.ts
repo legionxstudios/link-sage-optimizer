@@ -24,12 +24,20 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   try {
     // First analyze the page using our edge function
     const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze', {
-      body: { url }
+      body: { url },
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
 
     if (analysisError) {
       console.error("Analysis error:", analysisError);
-      throw new Error(analysisError.message);
+      throw new Error(`Analysis failed: ${analysisError.message}`);
+    }
+
+    if (!analysisData) {
+      console.error("No analysis data received");
+      throw new Error("No analysis data received from the server");
     }
 
     console.log("Raw API response:", analysisData);
@@ -39,12 +47,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       .from('page_analysis')
       .upsert({
         url,
-        title: analysisData.title,
-        content: analysisData.content,
-        detected_themes: analysisData.themes,
+        title: analysisData.title || '',
+        content: analysisData.content || '',
+        detected_themes: analysisData.themes || [],
         main_keywords: analysisData.keywords?.exact_match || [],
         seo_keywords: analysisData.keywords || {},
-        suggestions: analysisData.outboundSuggestions,
+        suggestions: analysisData.outboundSuggestions || [],
         created_at: new Date().toISOString()
       }, {
         onConflict: 'url',
@@ -53,7 +61,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     if (dbError) {
       console.error("Error storing analysis:", dbError);
-      throw new Error(`Database error: ${dbError.message}`);
+      // Don't throw here, just log the error since we still want to return the analysis results
     }
 
     return {

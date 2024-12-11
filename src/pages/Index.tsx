@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { AnalysisResults } from "@/components/analysis/AnalysisResults";
 import { analyzePage, AnalysisResponse } from "@/services/crawlerService";
+import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [url, setUrl] = useState("");
@@ -28,14 +29,20 @@ const Index = () => {
 
     try {
       setIsAnalyzing(true);
+      setResults(null); // Clear previous results
       toast.info("Analyzing content...");
       console.log("Starting analysis for:", url);
       
       const analysisResults = await analyzePage(url);
       console.log("Analysis completed:", analysisResults);
       
+      if (!analysisResults.outboundSuggestions || analysisResults.outboundSuggestions.length === 0) {
+        toast.warning("No link suggestions were generated. The backend might need more time to process.");
+      } else {
+        toast.success("Analysis complete!");
+      }
+      
       setResults(analysisResults);
-      toast.success("Analysis complete!");
     } catch (error: any) {
       console.error("Process failed:", error);
       toast.error(error.message || "Failed to process URL. Please try again.");
@@ -74,11 +81,12 @@ const Index = () => {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1"
+                disabled={isAnalyzing}
               />
               <Button type="submit" disabled={isAnalyzing}>
                 {isAnalyzing ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Analyzing...
                   </div>
                 ) : (
@@ -89,7 +97,14 @@ const Index = () => {
           </form>
         </Card>
 
-        {results && <AnalysisResults results={results} />}
+        {isAnalyzing && (
+          <div className="flex flex-col items-center justify-center p-12 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Processing your content...</p>
+          </div>
+        )}
+
+        {!isAnalyzing && results && <AnalysisResults results={results} />}
       </motion.div>
     </div>
   );
