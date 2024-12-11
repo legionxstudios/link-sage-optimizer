@@ -56,8 +56,7 @@ async function analyzeTopics(content: string) {
           parameters: {
             candidate_labels: [
               "photography", "portrait photography", "wedding photography",
-              "commercial photography", "event photography", "fashion photography",
-              "family photography", "product photography", "real estate photography"
+              "commercial photography", "event photography"
             ]
           }
         })
@@ -95,28 +94,16 @@ async function generateSEOKeywords(content: string, themes: string[]) {
           inputs: `${topicContext}Generate SEO keywords from: ${content.slice(0, 500)}`,
           parameters: {
             candidate_labels: [
-              // Photography service keywords
-              "professional photography services",
-              "portrait photography packages",
+              "professional photography",
+              "portrait session",
               "wedding photographer",
-              "family photo session",
-              "commercial photography services",
-              "product photography",
-              "event photography packages",
-              // Location-based keywords
-              "local photographer",
-              "photography studio",
-              "on-location photography",
-              // Specialty keywords
+              "family photos",
+              "commercial photography",
+              "photo studio",
               "professional headshots",
-              "engagement photos",
-              "corporate photography",
-              "real estate photography",
-              // Action keywords
-              "book photo session",
-              "photography pricing",
-              "photo gallery",
-              "portfolio"
+              "event photography",
+              "photo packages",
+              "photography portfolio"
             ]
           }
         })
