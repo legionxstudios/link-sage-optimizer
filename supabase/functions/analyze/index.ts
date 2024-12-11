@@ -13,7 +13,6 @@ const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -25,6 +24,15 @@ serve(async (req) => {
     if (!url) {
       throw new Error('URL is required');
     }
+
+    // Get the domain from the URL
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname;
+    console.log('Domain:', domain);
+
+    // Get or create website
+    let website = await getOrCreateWebsite(domain);
+    console.log('Website record:', website);
 
     // Fetch and parse the source page content
     const response = await fetch(url);
@@ -43,28 +51,6 @@ serve(async (req) => {
     // Extract keywords from source content
     const sourceKeywords = extractKeywords(sourceContent);
     console.log('Extracted keywords:', sourceKeywords);
-
-    // Get the domain from the URL
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname;
-
-    // Fetch website ID
-    const { data: website } = await supabase
-      .from('websites')
-      .select('id')
-      .eq('domain', domain)
-      .single();
-
-    if (!website) {
-      console.log('Website not found in database');
-      return new Response(
-        JSON.stringify({
-          keywords: { exact_match: [], broad_match: [], related_match: [] },
-          outboundSuggestions: []
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     // Fetch other pages from the same website
     const { data: pages, error: pagesError } = await supabase
@@ -132,6 +118,46 @@ serve(async (req) => {
     );
   }
 });
+
+async function getOrCreateWebsite(domain: string) {
+  console.log('Looking up website for domain:', domain);
+  
+  // First try to find existing website
+  const { data: existingWebsite, error: fetchError } = await supabase
+    .from('websites')
+    .select()
+    .eq('domain', domain)
+    .single();
+
+  if (fetchError && fetchError.code !== 'PGRST116') {
+    console.error('Error fetching website:', fetchError);
+    throw new Error(`Database error: ${fetchError.message}`);
+  }
+
+  if (existingWebsite) {
+    console.log('Found existing website:', existingWebsite);
+    return existingWebsite;
+  }
+
+  // Create new website if none exists
+  console.log('Creating new website for domain:', domain);
+  const { data: newWebsite, error: createError } = await supabase
+    .from('websites')
+    .insert([{
+      domain,
+      last_crawled_at: new Date().toISOString()
+    }])
+    .select()
+    .single();
+
+  if (createError || !newWebsite) {
+    console.error('Error creating website:', createError);
+    throw new Error(`Failed to create website: ${createError?.message}`);
+  }
+
+  console.log('Created new website:', newWebsite);
+  return newWebsite;
+}
 
 function extractKeywords(content: string): string[] {
   // Split content into words and clean them
