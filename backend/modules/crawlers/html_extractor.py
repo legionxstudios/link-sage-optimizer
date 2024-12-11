@@ -8,7 +8,17 @@ logger = logging.getLogger(__name__)
 class HTMLExtractor:
     @staticmethod
     def extract_main_content(soup: BeautifulSoup) -> str:
-        """Extract main content from HTML."""
+        """Extract readable text content from HTML while excluding code blocks."""
+        # First remove all script and style elements
+        for element in soup.find_all(['script', 'style', 'code', 'pre']):
+            element.decompose()
+            
+        # Get the body content
+        body = soup.body
+        if not body:
+            return ""
+            
+        # Find main content area if it exists
         content_selectors = [
             'article', 'main', '[role="main"]',
             '.post-content', '.entry-content', '.content'
@@ -19,21 +29,26 @@ class HTMLExtractor:
             content_area = soup.select_one(selector)
             if content_area:
                 break
-        
+                
         if not content_area:
-            content_area = soup.body
-        
-        if not content_area:
-            return ""
+            content_area = body
             
-        # Extract text from paragraphs
+        # Extract text from content elements, focusing on readable content
+        content_elements = content_area.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'td', 'th', 'div'])
         paragraphs = []
-        for p in content_area.find_all(['p', 'article', 'section']):
-            text = p.get_text(strip=True)
-            if len(text) > 50:  # Only keep substantial paragraphs
-                paragraphs.append(text)
         
-        return ' '.join(paragraphs)
+        for element in content_elements:
+            # Skip navigation, header, footer, etc.
+            if any(cls in str(element.get('class', [])).lower() 
+                  for cls in ['nav', 'header', 'footer', 'sidebar', 'menu', 'code', 'syntax']):
+                continue
+                
+            # Get clean text without extra whitespace
+            text = ' '.join(element.get_text().split())
+            if len(text) > 0:  # Keep all non-empty paragraphs
+                paragraphs.append(text)
+                
+        return '\n\n'.join(paragraphs)
 
     @staticmethod
     def extract_links(soup: BeautifulSoup, current_url: str, domain: str) -> Dict[str, List[Dict]]:
@@ -55,7 +70,7 @@ class HTMLExtractor:
                     'context': context
                 }
                 
-                if urlparse(absolute_url).netloc == domain:
+                if domain in absolute_url:
                     internal_links.append(link_data)
                 else:
                     external_links.append(link_data)

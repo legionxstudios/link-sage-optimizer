@@ -10,32 +10,28 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log('Analyzing page content...');
     const { url } = await req.json();
-    console.log('Starting analysis for:', url);
 
     if (!url || typeof url !== 'string') {
       throw new Error('Valid URL is required');
     }
 
-    // Extract content with timeout
-    const timeoutMs = 15000; // 15 second timeout
-    const contentPromise = extractContent(url);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Content extraction timed out')), timeoutMs)
-    );
-
-    const { title, content, links } = await Promise.race([contentPromise, timeoutPromise]);
+    // Extract content with improved error handling
+    const { title, content, links } = await extractContent(url);
     console.log('Content extracted, length:', content.length);
+    console.log('Sample content:', content.substring(0, 200) + '...');
 
     // Process in parallel for efficiency
     const [keywords, suggestions] = await Promise.all([
       extractKeywords(content),
-      generateSuggestions(content, links, url, title) // Pass title as well
+      generateSuggestions(content, links, url, title)
     ]);
 
     const analysisResult = {
@@ -43,7 +39,7 @@ serve(async (req) => {
       outboundSuggestions: suggestions.slice(0, 10) // Limit suggestions
     };
 
-    console.log('Analysis completed successfully');
+    console.log('Analysis completed:', analysisResult);
     return new Response(
       JSON.stringify(analysisResult),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
