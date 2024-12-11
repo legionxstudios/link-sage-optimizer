@@ -1,40 +1,47 @@
-import { logger } from './logger';
+interface ClassifyTextParams {
+  inputs: string;
+  parameters: {
+    candidate_labels: string[];
+  };
+}
+
+interface ClassifyTextResponse {
+  labels?: string[];
+  scores?: number[];
+}
 
 export class HuggingFaceAPI {
   private readonly apiKey: string;
-  private readonly baseUrl = 'https://api-inference.huggingface.co/models';
-  private readonly model = 'facebook/bart-large-mnli';
 
   constructor() {
-    const apiKey = Deno.env.get('HUGGING_FACE_API_KEY');
-    if (!apiKey) {
-      throw new Error('HUGGING_FACE_API_KEY is not set');
+    this.apiKey = Deno.env.get('HUGGING_FACE_API_KEY') || '';
+    if (!this.apiKey) {
+      console.warn('No Hugging Face API key found');
     }
-    this.apiKey = apiKey;
   }
 
-  async classifyText(payload: any) {
+  async classifyText(params: ClassifyTextParams): Promise<ClassifyTextResponse> {
     try {
       const response = await fetch(
-        `${this.baseUrl}/${this.model}`,
+        "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
+            "Authorization": `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(params),
         }
       );
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.statusText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
     } catch (error) {
-      logger.error('HuggingFace API error:', error);
-      throw error;
+      console.error('Error calling Hugging Face API:', error);
+      return {};
     }
   }
 }

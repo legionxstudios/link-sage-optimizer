@@ -1,6 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import { logger } from './logger';
-import { ThemeAnalyzer } from './theme-analyzer';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.3";
+import { ThemeAnalyzer } from "./theme-analyzer.ts";
 
 interface LinkSuggestion {
   suggestedAnchorText: string;
@@ -21,15 +20,15 @@ export class SuggestionGenerator {
 
   async generateSuggestions(content: string, url: string): Promise<LinkSuggestion[]> {
     try {
-      logger.info('Generating suggestions for URL:', url);
+      console.log('Generating suggestions for URL:', url);
       
       // Get themes from content
       const themes = await ThemeAnalyzer.analyzeThemes(content);
-      logger.info('Content themes:', themes);
+      console.log('Content themes:', themes);
 
       // Get related pages from database
       const relatedPages = await this.findRelatedPages(themes, url);
-      logger.info('Found related pages:', relatedPages.length);
+      console.log('Found related pages:', relatedPages.length);
 
       const suggestions: LinkSuggestion[] = [];
 
@@ -51,10 +50,10 @@ export class SuggestionGenerator {
         });
       }
 
-      logger.info('Generated suggestions:', suggestions.length);
+      console.log('Generated suggestions:', suggestions.length);
       return suggestions;
     } catch (error) {
-      logger.error('Error generating suggestions:', error);
+      console.error('Error generating suggestions:', error);
       return [];
     }
   }
@@ -88,8 +87,6 @@ export class SuggestionGenerator {
       s.toLowerCase().includes(keyword.toLowerCase())
     );
 
-    if (!relevantSentence) return null;
-
-    return relevantSentence.trim();
+    return relevantSentence?.trim() || null;
   }
 }

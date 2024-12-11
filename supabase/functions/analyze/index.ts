@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { SuggestionGenerator } from "./modules/suggestion-generator.ts";
-import { extractContent } from "./content-extractor.ts";
+import { extractContent } from "./content-analyzer.ts";
 import { extractKeywords } from "./keyword-extractor.ts";
 
 const corsHeaders = {

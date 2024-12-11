@@ -1,5 +1,4 @@
-import { HuggingFaceAPI } from './huggingface-api';
-import { logger } from './logger';
+import { HuggingFaceAPI } from "./huggingface-api.ts";
 
 export class ThemeAnalyzer {
   private static readonly DEFAULT_THEMES = [
@@ -10,7 +9,7 @@ export class ThemeAnalyzer {
 
   static async analyzeThemes(content: string): Promise<string[]> {
     try {
-      logger.info('Analyzing content themes...');
+      console.log('Analyzing content themes...');
       const api = new HuggingFaceAPI();
       
       const result = await api.classifyText({
@@ -21,7 +20,7 @@ export class ThemeAnalyzer {
       });
 
       if (!result.labels || !result.scores) {
-        logger.warn('Invalid theme analysis response, using defaults');
+        console.warn('Invalid theme analysis response, using defaults');
         return ThemeAnalyzer.DEFAULT_THEMES.slice(0, 3);
       }
 
@@ -29,10 +28,10 @@ export class ThemeAnalyzer {
         .filter((_, i) => result.scores[i] > 0.3)
         .slice(0, 5); // Get top 5 relevant themes
 
-      logger.info('Detected themes:', relevantThemes);
+      console.log('Detected themes:', relevantThemes);
       return relevantThemes;
     } catch (error) {
-      logger.error('Error analyzing themes:', error);
+      console.error('Error analyzing themes:', error);
       return ThemeAnalyzer.DEFAULT_THEMES.slice(0, 3);
     }
   }
