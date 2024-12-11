@@ -18,25 +18,28 @@ async def analyze_website_theme(content: str) -> List[str]:
                     "inputs": content[:1000],  # Analyze first 1000 chars for theme
                     "parameters": {
                         "candidate_labels": [
-                            "photography", "art", "business", "technology", 
-                            "travel", "lifestyle", "fashion", "food",
-                            "health", "education", "sports"
+                            "professional photography", "portrait photography", 
+                            "wedding photography", "commercial photography",
+                            "family photography", "event photography",
+                            "studio photography", "lifestyle photography"
                         ]
                     }
                 }
             )
             
             result = response.json()
+            logger.info(f"Theme analysis result: {result}")
+            
             scores = result.get("scores", [])
             labels = result.get("labels", [])
             
-            # Get top 3 themes with score > 0.3
+            # Get themes with score > 0.3
             theme_scores = list(zip(labels, scores))
             theme_scores.sort(key=lambda x: x[1], reverse=True)
-            return [theme for theme, score in theme_scores if score > 0.3][:3]
+            return [theme for theme, score in theme_scores if score > 0.3]
     except Exception as e:
         logger.error(f"Error analyzing website theme: {e}")
-        return ["general"]
+        return ["photography"]
 
 async def generate_seo_keywords(content: str, themes: List[str]) -> List[Dict]:
     """Generate SEO-friendly keywords based on content and themes."""
@@ -53,22 +56,25 @@ async def generate_seo_keywords(content: str, themes: List[str]) -> List[Dict]:
                     "inputs": prompt,
                     "parameters": {
                         "candidate_labels": [
-                            # Theme-specific keywords
-                            "professional photography", "portrait photography", "wedding photos",
-                            "photo studio", "photography services", "photo gallery",
-                            "professional photographer", "photo session", "photography portfolio",
-                            "commercial photography", "event photography", "photography pricing",
-                            # Location-based keywords (if relevant)
-                            "local photographer", "photography near me", "studio location",
+                            # Photography service keywords
+                            "professional photographer", "portrait session",
+                            "wedding photographer", "family portraits",
+                            "commercial photography", "studio session",
+                            "professional headshots", "event photography",
+                            # Location-based keywords
+                            "local photographer", "photography studio",
+                            "on-location photography",
                             # Service-based keywords
-                            "book photo session", "photography packages", "photo editing",
-                            "photography consultation", "photography booking"
+                            "photo session booking", "photography packages",
+                            "professional photo editing", "photography consultation"
                         ]
                     }
                 }
             )
             
             result = response.json()
+            logger.info(f"SEO keyword generation result: {result}")
+            
             scores = result.get("scores", [])
             labels = result.get("labels", [])
             
@@ -101,7 +107,7 @@ async def generate_link_suggestions(
         seo_keywords = await generate_seo_keywords(content, themes)
         logger.info(f"Generated SEO keywords: {seo_keywords}")
         
-        # Create suggestions based on SEO keywords
+        # Create suggestions based on SEO keywords and content analysis
         suggestions = []
         existing_urls = {link.get('url', '') for link in existing_links}
         
@@ -109,21 +115,27 @@ async def generate_link_suggestions(
             keyword = kw_data["keyword"]
             relevance = kw_data["relevance"]
             
-            # Find relevant context for this keyword
-            sentences = [s.strip() for s in content.split('.') 
-                        if keyword.lower() in s.lower()]
+            # Find relevant context for this keyword in the content
+            sentences = content.split('.')
+            relevant_sentences = [
+                s.strip() for s in sentences 
+                if any(k.lower() in s.lower() for k in keyword.split())
+            ]
             
-            if sentences:
-                suggestions.append({
+            if relevant_sentences:
+                suggestion = {
                     'suggestedAnchorText': keyword,
-                    'context': sentences[0],
+                    'context': relevant_sentences[0],
                     'matchType': 'seo_optimized',
                     'relevanceScore': relevance,
-                    'themeMatch': themes[0] if themes else 'general'
-                })
+                    'themeMatch': themes[0] if themes else 'photography'
+                }
+                logger.info(f"Generated suggestion: {suggestion}")
+                suggestions.append(suggestion)
         
         # Sort by relevance and return top suggestions
         suggestions.sort(key=lambda x: x['relevanceScore'], reverse=True)
+        logger.info(f"Final suggestions count: {len(suggestions)}")
         return {'outboundSuggestions': suggestions[:10]}
         
     except Exception as e:

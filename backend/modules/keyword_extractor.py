@@ -19,6 +19,12 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
     try:
         # Initialize NLTK resources
         stop_words = set(stopwords.words('english'))
+        # Add common words that shouldn't be keywords
+        stop_words.update(['will', 'your', 'which', 'available'])
+        
+        # Pre-process content
+        # Replace common separators with spaces to avoid incorrect word joining
+        content = content.replace('-', ' ').replace('/', ' ').replace('_', ' ')
         sentences = sent_tokenize(content)
         
         # Extract and score keyword phrases
@@ -36,21 +42,32 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
                         keywords.append(word)
                     
                     # Two word phrase
-                    if i > 0:
+                    if i > 0 and pos_tags[i-1][1] in ['JJ', 'NN', 'NNP']:
                         prev_word = pos_tags[i-1][0].lower()
                         if prev_word not in stop_words:
                             keywords.append(f"{prev_word} {word}")
                     
                     # Three word phrase
-                    if i > 1:
+                    if i > 1 and all(tag[1] in ['JJ', 'NN', 'NNP'] for tag in pos_tags[i-2:i]):
                         prev_words = f"{pos_tags[i-2][0].lower()} {pos_tags[i-1][0].lower()}"
                         if not any(w in stop_words for w in prev_words.split()):
                             keywords.append(f"{prev_words} {word}")
         
-        # Score and categorize keywords
+        # Filter and score keywords
+        photography_related = [
+            'photography', 'portrait', 'photo', 'session', 'studio',
+            'photographer', 'shoot', 'camera', 'wedding', 'family',
+            'professional', 'portrait session', 'photo shoot',
+            'wedding photography', 'family portraits'
+        ]
+        
+        # Score keywords based on relevance to photography
         keyword_scores = {}
         for keyword in keywords:
             score = keywords.count(keyword)
+            # Boost score for photography-related terms
+            if any(term in keyword.lower() for term in photography_related):
+                score *= 1.5
             # Boost score for phrases
             if ' ' in keyword:
                 score *= 1.2
