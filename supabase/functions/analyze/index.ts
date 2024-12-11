@@ -15,13 +15,45 @@ serve(async (req) => {
   }
 
   try {
-    // Get the request body as a JSON object directly
-    const requestData = await req.json();
-    console.log('Received request data:', requestData);
+    // First check if the content-type is correct
+    const contentType = req.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      console.error('Invalid content type:', contentType);
+      return new Response(
+        JSON.stringify({ error: 'Content-Type must be application/json' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Get the raw body first
+    const rawBody = await req.text();
+    console.log('Raw request body:', rawBody);
+
+    // Try to parse the JSON
+    let requestData;
+    try {
+      requestData = JSON.parse(rawBody);
+    } catch (error) {
+      console.error('Failed to parse JSON:', error, 'Raw body:', rawBody);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid JSON in request body',
+          details: error.message,
+          receivedBody: rawBody
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    console.log('Parsed request data:', requestData);
 
     const { url } = requestData;
-    console.log('Starting analysis for:', url);
-
     if (!url || typeof url !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Valid URL is required' }),
@@ -31,6 +63,8 @@ serve(async (req) => {
         }
       );
     }
+
+    console.log('Starting analysis for:', url);
 
     // Extract content with timeout
     const timeoutMs = 30000; // 30 second timeout

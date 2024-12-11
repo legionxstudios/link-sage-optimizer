@@ -22,9 +22,17 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
-    // First analyze the page using our edge function
+    // Explicitly structure the request body
+    const requestBody = {
+      url: url,
+      timestamp: new Date().toISOString(), // Add timestamp to ensure unique requests
+    };
+
+    console.log("Sending analysis request with body:", requestBody);
+
+    // Use explicit content-type header
     const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze', {
-      body: { url },
+      body: JSON.stringify(requestBody),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -42,7 +50,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     console.log("Raw API response:", analysisData);
 
-    // Store the analysis results in the database using upsert
+    // Store the analysis results in the database
     const { error: dbError } = await supabase
       .from('page_analysis')
       .upsert({
@@ -54,14 +62,10 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
         seo_keywords: analysisData.keywords || {},
         suggestions: analysisData.outboundSuggestions || [],
         created_at: new Date().toISOString()
-      }, {
-        onConflict: 'url',
-        ignoreDuplicates: false
       });
 
     if (dbError) {
       console.error("Error storing analysis:", dbError);
-      // Don't throw here, just log the error since we still want to return the analysis results
     }
 
     return {
