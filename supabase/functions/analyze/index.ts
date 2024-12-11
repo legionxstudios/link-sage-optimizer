@@ -32,12 +32,14 @@ serve(async (req) => {
 
     const title = doc.querySelector('title')?.textContent || '';
     const content = extractContent(doc);
-    const mainKeywords = ['business']; // Simplified for now
+    const mainKeywords = extractKeywords(content);
     
-    // Store analysis results
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    console.log('Saving analysis results to database');
 
     const { data, error } = await supabase
       .from('page_analysis')
@@ -57,6 +59,8 @@ serve(async (req) => {
       console.error('Database error:', error);
       throw error;
     }
+
+    console.log('Analysis saved successfully:', data);
 
     return new Response(
       JSON.stringify({
@@ -115,4 +119,19 @@ function extractContent(doc: Document): string {
   }
 
   return content.trim();
+}
+
+function extractKeywords(content: string): string[] {
+  const words = content.toLowerCase()
+    .split(/\W+/)
+    .filter(word => word.length > 3)
+    .reduce((acc: { [key: string]: number }, word) => {
+      acc[word] = (acc[word] || 0) + 1;
+      return acc;
+    }, {});
+
+  return Object.entries(words)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10)
+    .map(([word]) => word);
 }
