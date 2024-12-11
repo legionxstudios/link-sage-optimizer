@@ -3,39 +3,49 @@ from typing import List, Dict, Any
 import httpx
 import os
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
 async def analyze_content(content: str) -> Dict[str, Any]:
-    """Analyze the full content using OpenAI API to generate link suggestions."""
+    """Analyze content using OpenAI function calling to extract key phrases."""
     try:
-        logger.info("Starting content analysis with OpenAI")
+        logger.info("Starting content analysis with OpenAI function calling")
+        
+        function_definition = {
+            "name": "extract_key_phrases",
+            "description": "Extract 2-3 word key phrases related to the central topics from the provided webpage content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key_phrases": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "List of key phrases extracted from the text."
+                    }
+                },
+                "required": ["key_phrases"]
+            }
+        }
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             payload = {
                 "model": "gpt-4o-mini",
                 "messages": [
                     {
                         "role": "system",
-                        "content": """You are an expert at suggesting relevant outbound links for content. For the given content:
-                        1. Identify 3-5 specific topics or concepts that would benefit from external references
-                        2. For each topic, suggest:
-                           - An anchor text (2-4 words)
-                           - A brief context (the relevant sentence or phrase)
-                           - A relevance score (0.0-1.0)
-                        3. Format your response as a JSON array of suggestions, each with:
-                           {
-                             "suggestedAnchorText": "string",
-                             "context": "string",
-                             "matchType": "keyword_based",
-                             "relevanceScore": number
-                           }"""
+                        "content": "You are an expert at identifying key topics and phrases for SEO interlinking."
                     },
                     {
                         "role": "user",
-                        "content": f"Generate link suggestions for: {content[:2000]}"
+                        "content": f"Extract 10 key phrases (each 2-3 words) that represent the main topics of the following content for SEO interlinking:\n\n{content[:2000]}"
                     }
-                ]
+                ],
+                "functions": [function_definition],
+                "function_call": {"name": "extract_key_phrases"}
             }
             
             logger.info("Sending request to OpenAI")
@@ -57,10 +67,27 @@ async def analyze_content(content: str) -> Dict[str, Any]:
                 return []
                 
             try:
-                # The response should be a JSON string containing an array of suggestions
-                suggestions = result['choices'][0]['message']['content']
-                logger.info(f"Generated suggestions: {suggestions}")
+                function_call = result['choices'][0]['message'].get('function_call')
+                if not function_call:
+                    logger.error("No function call in response")
+                    return []
+                    
+                arguments = json.loads(function_call['arguments'])
+                key_phrases = arguments.get('key_phrases', [])
+                
+                # Convert key phrases to link suggestions
+                suggestions = []
+                for phrase in key_phrases:
+                    suggestions.append({
+                        "suggestedAnchorText": phrase,
+                        "context": f"Found key phrase: {phrase}",
+                        "matchType": "keyword_based",
+                        "relevanceScore": 0.8  # High confidence since these are main topics
+                    })
+                
+                logger.info(f"Generated {len(suggestions)} suggestions from key phrases")
                 return suggestions
+                
             except Exception as e:
                 logger.error(f"Error parsing OpenAI response: {str(e)}")
                 return []
@@ -84,31 +111,9 @@ async def generate_link_suggestions(
         if not suggestions:
             logger.warning("No suggestions generated")
             return {'outboundSuggestions': []}
-            
-        # Ensure we have valid suggestions
-        if isinstance(suggestions, str):
-            try:
-                import json
-                suggestions = json.loads(suggestions)
-            except Exception as e:
-                logger.error(f"Error parsing suggestions JSON: {str(e)}")
-                return {'outboundSuggestions': []}
         
-        # Validate and format suggestions
-        formatted_suggestions = []
-        for suggestion in suggestions:
-            if isinstance(suggestion, dict):
-                formatted_suggestion = {
-                    'suggestedAnchorText': suggestion.get('suggestedAnchorText', ''),
-                    'context': suggestion.get('context', ''),
-                    'matchType': suggestion.get('matchType', 'keyword_based'),
-                    'relevanceScore': float(suggestion.get('relevanceScore', 0.5))
-                }
-                if formatted_suggestion['suggestedAnchorText'] and formatted_suggestion['context']:
-                    formatted_suggestions.append(formatted_suggestion)
-        
-        logger.info(f"Generated {len(formatted_suggestions)} valid suggestions")
-        return {'outboundSuggestions': formatted_suggestions[:10]}  # Limit to top 10
+        logger.info(f"Generated {len(suggestions)} valid suggestions")
+        return {'outboundSuggestions': suggestions[:10]}  # Limit to top 10
         
     except Exception as e:
         logger.error(f"Error generating suggestions: {str(e)}", exc_info=True)
