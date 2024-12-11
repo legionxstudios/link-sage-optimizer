@@ -11,15 +11,29 @@ interface LinkSuggestionsProps {
 export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
   console.log("Rendering suggestions:", suggestions);
 
-  if (!Array.isArray(suggestions)) {
-    console.error("Invalid suggestions data:", suggestions);
-    return null;
+  if (!suggestions || !Array.isArray(suggestions) || suggestions.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No link suggestions found for this content.
+      </div>
+    );
   }
 
   const getRelevanceColor = (score: number) => {
-    if (score >= 0.9) return "text-green-600";
-    if (score >= 0.7) return "text-yellow-600";
+    if (score >= 0.8) return "text-green-600";
+    if (score >= 0.6) return "text-yellow-600";
     return "text-red-600";
+  };
+
+  const getMatchTypeLabel = (type: string) => {
+    switch (type) {
+      case 'high_relevance':
+        return <Badge variant="success">High Relevance</Badge>;
+      case 'medium_relevance':
+        return <Badge variant="warning">Medium Relevance</Badge>;
+      default:
+        return <Badge variant="secondary">{type}</Badge>;
+    }
   };
 
   return (
@@ -27,32 +41,20 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Suggested Anchor Text</TableHead>
-            <TableHead>Target Page</TableHead>
+            <TableHead>Suggested Link</TableHead>
+            <TableHead>Match Type</TableHead>
             <TableHead>Relevance</TableHead>
-            <TableHead>Suggested Context</TableHead>
+            <TableHead>Context</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {suggestions.map((suggestion, index) => (
             <TableRow key={index}>
               <TableCell>
-                <Badge variant="outline">{suggestion.suggestedAnchorText}</Badge>
+                <span className="font-medium">{suggestion.suggestedAnchorText}</span>
               </TableCell>
               <TableCell>
-                {suggestion.targetUrl ? (
-                  <a 
-                    href={suggestion.targetUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
-                  >
-                    {suggestion.targetTitle || 'View page'}
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">External link</span>
-                )}
+                {getMatchTypeLabel(suggestion.matchType)}
               </TableCell>
               <TableCell>
                 <span className={getRelevanceColor(suggestion.relevanceScore)}>
@@ -62,9 +64,9 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
               <TableCell className="max-w-[400px]">
                 <Tooltip>
                   <TooltipTrigger className="cursor-help text-left">
-                    <span className="line-clamp-3 whitespace-pre-wrap">{suggestion.context}</span>
+                    <span className="line-clamp-2">{suggestion.context}</span>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-[500px]">
+                  <TooltipContent side="bottom" className="max-w-[500px] p-4">
                     <p className="whitespace-pre-wrap">{suggestion.context}</p>
                   </TooltipContent>
                 </Tooltip>
