@@ -45,7 +45,9 @@ async def generate_link_suggestions(
                             }
                         )
                         
-                        scores = response.json().get("scores", [])
+                        result = response.json()
+                        scores = result.get("scores", [])
+                        labels = result.get("labels", [])
                         
                         if scores and scores[0] > 0.3:  # Relevance threshold
                             suggestions.append({

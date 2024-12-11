@@ -1,9 +1,8 @@
 import { Card } from "@/components/ui/card";
 import { LinkSuggestions } from "./LinkSuggestions";
 import { motion } from "framer-motion";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AnalysisResponse } from "@/services/crawlerService";
 import { Badge } from "@/components/ui/badge";
+import { AnalysisResponse } from "@/services/crawlerService";
 
 interface AnalysisResultsProps {
   results: AnalysisResponse;
