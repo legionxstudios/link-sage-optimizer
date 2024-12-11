@@ -34,25 +34,23 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     console.log("Raw analysis response:", analysisData);
 
-    // Verify the response structure
+    // Verify and transform the response structure
     if (!analysisData) {
       console.error("No analysis data received");
       throw new Error("No analysis data received from server");
     }
 
-    if (!analysisData.keywords) {
-      console.error("No keywords in analysis data:", analysisData);
-      throw new Error("No keywords found in analysis response");
-    }
-
-    if (!analysisData.outboundSuggestions) {
-      console.error("No suggestions in analysis data:", analysisData);
-      throw new Error("No suggestions found in analysis response");
-    }
+    // Extract suggestions from the correct location in the response
+    const suggestions = analysisData.suggestions || analysisData.outboundSuggestions || [];
+    console.log("Extracted suggestions:", suggestions);
 
     const response = {
-      keywords: analysisData.keywords || { exact_match: [], broad_match: [], related_match: [] },
-      outboundSuggestions: Array.isArray(analysisData.outboundSuggestions) ? analysisData.outboundSuggestions : []
+      keywords: analysisData.keywords || { 
+        exact_match: [], 
+        broad_match: [], 
+        related_match: [] 
+      },
+      outboundSuggestions: suggestions
     };
 
     console.log("Processed analysis response:", response);
