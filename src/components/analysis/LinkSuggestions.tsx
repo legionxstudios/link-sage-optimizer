@@ -28,11 +28,11 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
   const getMatchTypeLabel = (type: string) => {
     switch (type) {
       case 'high_relevance':
-        return <Badge variant="success">High Relevance</Badge>;
+        return <Badge variant="default">High Relevance</Badge>;
       case 'medium_relevance':
-        return <Badge variant="warning">Medium Relevance</Badge>;
+        return <Badge variant="secondary">Medium Relevance</Badge>;
       default:
-        return <Badge variant="secondary">{type}</Badge>;
+        return <Badge variant="outline">{type}</Badge>;
     }
   };
 

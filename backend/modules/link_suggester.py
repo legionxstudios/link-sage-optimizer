@@ -18,30 +18,17 @@ async def analyze_website_theme(content: str) -> List[str]:
                     "inputs": content[:1000],  # Analyze first 1000 chars for theme
                     "parameters": {
                         "candidate_labels": [
-                            # Vintage and Film Photography
-                            "vintage cameras", "polaroid photography", "instant film photography",
-                            "film cameras", "analog photography", "lomography",
-                            "vintage polaroid", "instant cameras", "sx-70 cameras",
-                            
-                            # Film Types and Processes
-                            "instant film", "35mm film", "medium format film",
-                            "film development", "darkroom techniques", "film stocks",
-                            
-                            # Camera Types
-                            "rangefinder cameras", "tlr cameras", "folding cameras",
-                            "box cameras", "point and shoot film", "medium format cameras",
-                            
-                            # Modern Photography
-                            "digital photography", "mirrorless cameras", "dslr photography",
-                            "smartphone photography", "computational photography",
-                            
-                            # Photography Genres
-                            "street photography", "portrait photography", "landscape photography",
-                            "documentary photography", "fashion photography", "product photography",
-                            
-                            # Technical Aspects
-                            "exposure techniques", "composition rules", "lighting setup",
-                            "camera settings", "lens selection", "flash photography"
+                            # Top 10 most relevant photography themes
+                            "digital photography",
+                            "film photography",
+                            "camera equipment",
+                            "photo editing",
+                            "photography tutorials",
+                            "portrait photography",
+                            "landscape photography",
+                            "street photography",
+                            "photography business",
+                            "photography techniques"
                         ]
                     }
                 }
