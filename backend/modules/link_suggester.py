@@ -8,29 +8,27 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 async def analyze_content(content: str) -> Dict[str, Any]:
-    """Analyze the full content using HuggingFace API."""
+    """Analyze the full content using OpenAI API."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Analyze content with a broader set of labels
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-                headers={"Authorization": f"Bearer {os.getenv('HUGGING_FACE_API_KEY')}"},
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"},
                 json={
-                    "inputs": content[:2000],  # Analyze larger chunk of content
-                    "parameters": {
-                        "candidate_labels": [
-                            "technical guide",
-                            "product review",
-                            "tutorial",
-                            "case study",
-                            "industry news",
-                            "how-to guide",
-                            "comparison",
-                            "best practices",
-                            "tips and tricks",
-                            "expert advice"
-                        ]
-                    }
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": """You are an expert content analyzer. Analyze the content and determine:
+                            1. The main content type (technical guide, product review, tutorial, etc.)
+                            2. Key topics that would benefit from external references
+                            3. The target audience level (beginner, intermediate, expert)"""
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Analyze this content: {content[:2000]}"
+                        }
+                    ]
                 }
             )
             
@@ -38,19 +36,43 @@ async def analyze_content(content: str) -> Dict[str, Any]:
             logger.info(f"Content analysis result: {result}")
             
             if "error" in result:
-                logger.error(f"API error: {result['error']}")
+                logger.error(f"OpenAI API error: {result['error']}")
                 return {"content_type": "article", "relevance_scores": {}}
             
-            scores = result.get("scores", [])
-            labels = result.get("labels", [])
+            analysis = result['choices'][0]['message']['content']
+            
+            # Parse the analysis to extract content type and scores
+            content_types = {
+                "technical guide": 0.9,
+                "tutorial": 0.85,
+                "product review": 0.8,
+                "case study": 0.75,
+                "how-to guide": 0.85,
+                "comparison": 0.8,
+                "best practices": 0.85,
+                "tips and tricks": 0.75
+            }
+            
+            # Determine content type based on OpenAI's analysis
+            detected_type = "article"
+            max_score = 0
+            
+            for content_type, base_score in content_types.items():
+                if content_type.lower() in analysis.lower():
+                    if base_score > max_score:
+                        detected_type = content_type
+                        max_score = base_score
             
             return {
-                "content_type": labels[0] if labels else "article",
-                "relevance_scores": dict(zip(labels, scores))
+                "content_type": detected_type,
+                "relevance_scores": {
+                    ctype: score if ctype == detected_type else score * 0.5
+                    for ctype, score in content_types.items()
+                }
             }
             
     except Exception as e:
-        logger.error(f"Error analyzing content: {e}")
+        logger.error(f"Error analyzing content with OpenAI: {e}")
         return {"content_type": "article", "relevance_scores": {}}
 
 async def generate_link_suggestions(
