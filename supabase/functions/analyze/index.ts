@@ -34,7 +34,7 @@ serve(async (req) => {
     let website = await getOrCreateWebsite(domain);
     console.log('Website record:', website);
 
-    // Fetch and parse the source page content
+    // Save the page content and analysis
     const response = await fetch(url);
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -48,9 +48,28 @@ serve(async (req) => {
     const sourceContent = mainContent ? mainContent.textContent : doc.body.textContent;
     const sourceTitle = doc.querySelector('title')?.textContent || '';
     
-    // Extract keywords from source content
-    const sourceKeywords = extractKeywords(sourceContent);
+    // Save page analysis
+    const sourceKeywords = extractKeywords(sourceContent || '');
     console.log('Extracted keywords:', sourceKeywords);
+
+    const { data: pageAnalysis, error: analysisError } = await supabase
+      .from('page_analysis')
+      .insert({
+        url: url,
+        title: sourceTitle,
+        content: sourceContent,
+        main_keywords: sourceKeywords,
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (analysisError) {
+      console.error('Error saving page analysis:', analysisError);
+      throw new Error(`Failed to save page analysis: ${analysisError.message}`);
+    }
+
+    console.log('Saved page analysis:', pageAnalysis);
 
     // Fetch other pages from the same website
     const { data: pages, error: pagesError } = await supabase
@@ -74,7 +93,7 @@ serve(async (req) => {
         const similarityScore = calculateSimilarity(sourceKeywords, pageKeywords);
         
         // Find relevant context for the link
-        const context = findLinkContext(sourceContent, page.title || '', pageKeywords);
+        const context = findLinkContext(sourceContent || '', page.title || '', pageKeywords);
         
         if (similarityScore > 0.2 && context) { // Adjust threshold as needed
           suggestions.push({
@@ -122,41 +141,51 @@ serve(async (req) => {
 async function getOrCreateWebsite(domain: string) {
   console.log('Looking up website for domain:', domain);
   
-  // First try to find existing website
-  const { data: existingWebsite, error: fetchError } = await supabase
-    .from('websites')
-    .select()
-    .eq('domain', domain)
-    .single();
+  try {
+    // First try to find existing website
+    const { data: existingWebsite, error: fetchError } = await supabase
+      .from('websites')
+      .select()
+      .eq('domain', domain)
+      .single();
 
-  if (fetchError && fetchError.code !== 'PGRST116') {
-    console.error('Error fetching website:', fetchError);
-    throw new Error(`Database error: ${fetchError.message}`);
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Error fetching website:', fetchError);
+      throw new Error(`Database error: ${fetchError.message}`);
+    }
+
+    if (existingWebsite) {
+      console.log('Found existing website:', existingWebsite);
+      return existingWebsite;
+    }
+
+    // Create new website if none exists
+    console.log('Creating new website for domain:', domain);
+    const { data: newWebsite, error: createError } = await supabase
+      .from('websites')
+      .insert([{
+        domain,
+        last_crawled_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (createError) {
+      console.error('Error creating website:', createError);
+      throw new Error(`Failed to create website: ${createError.message}`);
+    }
+
+    if (!newWebsite) {
+      throw new Error('Failed to create website record');
+    }
+
+    console.log('Created new website:', newWebsite);
+    return newWebsite;
+
+  } catch (error) {
+    console.error('Error in getOrCreateWebsite:', error);
+    throw error;
   }
-
-  if (existingWebsite) {
-    console.log('Found existing website:', existingWebsite);
-    return existingWebsite;
-  }
-
-  // Create new website if none exists
-  console.log('Creating new website for domain:', domain);
-  const { data: newWebsite, error: createError } = await supabase
-    .from('websites')
-    .insert([{
-      domain,
-      last_crawled_at: new Date().toISOString()
-    }])
-    .select()
-    .single();
-
-  if (createError || !newWebsite) {
-    console.error('Error creating website:', createError);
-    throw new Error(`Failed to create website: ${createError?.message}`);
-  }
-
-  console.log('Created new website:', newWebsite);
-  return newWebsite;
 }
 
 function extractKeywords(content: string): string[] {
