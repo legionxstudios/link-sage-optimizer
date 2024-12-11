@@ -22,7 +22,6 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
-    // First analyze the page using our edge function
     const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze', {
       body: { url }
     });
@@ -33,6 +32,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     }
 
     console.log("Analysis completed successfully:", analysisData);
+
+    // Verify the response structure
+    if (!analysisData || !analysisData.keywords || !analysisData.outboundSuggestions) {
+      console.error("Invalid analysis response:", analysisData);
+      throw new Error("Invalid analysis response structure");
+    }
 
     return {
       keywords: analysisData.keywords || { exact_match: [], broad_match: [], related_match: [] },
