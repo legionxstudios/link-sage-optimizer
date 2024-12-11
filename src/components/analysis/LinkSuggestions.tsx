@@ -1,15 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-interface LinkSuggestion {
-  sourceUrl: string;
-  targetUrl: string;
-  suggestedAnchorText: string;
-  matchType: string;
-  relevanceScore: number;
-  context: string;
-}
+import { LinkSuggestion } from "@/services/crawlerService";
 
 interface LinkSuggestionsProps {
   suggestions: LinkSuggestion[];
@@ -29,22 +21,11 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
     return "text-red-600";
   };
 
-  const formatUrl = (url: string) => {
-    try {
-      const urlObj = new URL(url);
-      return `${urlObj.pathname}${urlObj.search}`;
-    } catch (e) {
-      console.error("Invalid URL:", url, e);
-      return url;
-    }
-  };
-
   return (
     <div className="space-y-4">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Target Page</TableHead>
             <TableHead>Suggested Anchor Text</TableHead>
             <TableHead>Match Type</TableHead>
             <TableHead>Relevance</TableHead>
@@ -54,21 +35,11 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
         <TableBody>
           {suggestions.map((suggestion, index) => (
             <TableRow key={index}>
-              <TableCell className="max-w-[200px] truncate">
-                <Tooltip>
-                  <TooltipTrigger className="cursor-help">
-                    {formatUrl(suggestion.targetUrl)}
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Full URL: {suggestion.targetUrl}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TableCell>
               <TableCell>
                 <Badge variant="outline">{suggestion.suggestedAnchorText}</Badge>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{suggestion.matchType || 'Semantic Match'}</Badge>
+                <Badge variant="secondary">{suggestion.matchType}</Badge>
               </TableCell>
               <TableCell>
                 <span className={getRelevanceColor(suggestion.relevanceScore)}>

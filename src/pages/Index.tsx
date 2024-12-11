@@ -5,15 +5,14 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { AnalysisResults } from "@/components/analysis/AnalysisResults";
-import { analyzePage, crawlWebsite, AnalysisResponse } from "@/services/crawlerService";
+import { analyzePage, AnalysisResponse } from "@/services/crawlerService";
 
 const Index = () => {
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isCrawling, setIsCrawling] = useState(false);
   const [results, setResults] = useState<AnalysisResponse | null>(null);
 
-  const handleCrawlAndAnalyze = async (e: React.FormEvent) => {
+  const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) {
       toast.error("Please enter a URL to analyze");
@@ -28,16 +27,9 @@ const Index = () => {
     }
 
     try {
-      setIsCrawling(true);
-      toast.info("Starting website crawl...");
-      console.log("Starting crawl for:", url);
-      
-      const crawlResult = await crawlWebsite(url);
-      console.log("Crawl completed:", crawlResult);
-      toast.success(`Crawl complete! Processed ${crawlResult.pagesProcessed} pages`);
-      
       setIsAnalyzing(true);
-      toast.info("Analyzing crawled content...");
+      toast.info("Analyzing content...");
+      console.log("Starting analysis for:", url);
       
       const analysisResults = await analyzePage(url);
       console.log("Analysis completed:", analysisResults);
@@ -49,7 +41,6 @@ const Index = () => {
       toast.error(error.message || "Failed to process URL. Please try again.");
       setResults(null);
     } finally {
-      setIsCrawling(false);
       setIsAnalyzing(false);
     }
   };
@@ -64,40 +55,34 @@ const Index = () => {
       >
         <div className="text-center space-y-4">
           <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary/5 text-primary text-sm font-medium">
-            Internal Link Analyzer
+            Link Suggestion Tool
           </div>
           <h1 className="text-4xl font-bold tracking-tight">
-            Optimize Your Internal Links
+            Get Smart Link Suggestions
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Analyze your website's internal linking structure and get AI-powered suggestions
-            for improvement.
+            Analyze your content and get AI-powered suggestions for relevant outbound links.
           </p>
         </div>
 
         <Card className="p-6">
-          <form onSubmit={handleCrawlAndAnalyze} className="space-y-4">
+          <form onSubmit={handleAnalyze} className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <Input
                 type="url"
-                placeholder="Enter your website URL (e.g., https://example.com)"
+                placeholder="Enter your page URL (e.g., https://example.com/page)"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1"
               />
-              <Button type="submit" disabled={isAnalyzing || isCrawling}>
-                {isCrawling ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Crawling...
-                  </div>
-                ) : isAnalyzing ? (
+              <Button type="submit" disabled={isAnalyzing}>
+                {isAnalyzing ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     Analyzing...
                   </div>
                 ) : (
-                  "Analyze Site"
+                  "Analyze Content"
                 )}
               </Button>
             </div>
