@@ -1,3 +1,5 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { LinkSuggestion } from "./types.ts";
 
 export async function generateSuggestions(content: string, links: any[]) {
@@ -64,6 +66,12 @@ async function analyzeTopics(content: string) {
     
     const data = await response.json();
     console.log('Theme analysis response:', data);
+
+    if (!data.labels || !data.scores) {
+      console.error('Invalid theme analysis response:', data);
+      return ['photography'];
+    }
+
     return data.labels.filter((_: string, i: number) => data.scores[i] > 0.3);
   } catch (error) {
     console.error('Error analyzing topics:', error);
@@ -117,6 +125,11 @@ async function generateSEOKeywords(content: string, themes: string[]) {
     
     const data = await response.json();
     console.log('SEO keyword generation response:', data);
+
+    if (!data.labels || !data.scores) {
+      console.error('Invalid SEO keyword response:', data);
+      return [];
+    }
     
     return data.labels
       .map((label: string, index: number) => ({
