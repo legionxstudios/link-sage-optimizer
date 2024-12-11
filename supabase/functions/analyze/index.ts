@@ -9,7 +9,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -22,19 +21,16 @@ serve(async (req) => {
       throw new Error('Valid URL is required');
     }
 
-    // Extract content with improved error handling
     const { title, content } = await extractContent(url);
     console.log('Content extracted, length:', content.length);
 
-    // Process keywords and generate suggestions
     const keywords = extractKeywords(content);
     console.log('Keywords extracted:', keywords);
 
-    // Generate link suggestions using AI
-    const suggestions = await generateSuggestions(content, keywords);
+    // Generate link suggestions using content analysis
+    const suggestions = await generateSuggestionsFromContent(content, keywords.exact_match);
     console.log('Generated suggestions:', suggestions);
 
-    // Store analysis in database
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -84,8 +80,11 @@ serve(async (req) => {
   }
 });
 
-async function generateSuggestions(content: string, keywords: any) {
+async function generateSuggestionsFromContent(content: string, keywords: string[]) {
   try {
+    // Select top 5 keywords for analysis to stay within API limits
+    const topKeywords = keywords.slice(0, 5);
+    
     // Call Hugging Face API for content analysis
     const response = await fetch(
       "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
@@ -96,18 +95,19 @@ async function generateSuggestions(content: string, keywords: any) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          inputs: content.substring(0, 2000), // Analyze first 2000 chars
+          inputs: content.substring(0, 2000),
           parameters: {
             candidate_labels: [
-              ...keywords.exact_match,
-              "photography equipment",
-              "camera reviews",
-              "photography tutorials",
-              "photo editing",
-              "photography techniques",
-              "camera comparison",
-              "photography tips",
-              "camera accessories"
+              "technology",
+              "business",
+              "marketing",
+              "software",
+              "digital",
+              "services",
+              "solutions",
+              "products",
+              "support",
+              "tools"
             ]
           }
         }),
@@ -115,30 +115,58 @@ async function generateSuggestions(content: string, keywords: any) {
     );
 
     const result = await response.json();
-    console.log('AI analysis result:', result);
+    console.log('Content analysis result:', result);
 
-    // Generate suggestions based on AI analysis
-    const suggestions = result.scores
-      ?.map((score: number, index: number) => ({
-        suggestedAnchorText: result.labels[index],
-        context: findRelevantContext(content, result.labels[index]),
-        matchType: score > 0.8 ? 'high_relevance' : 'medium_relevance',
-        relevanceScore: score
-      }))
-      .filter((s: any) => s.relevanceScore > 0.5)
-      .slice(0, 5) || [];
+    if (result.error) {
+      console.error('Hugging Face API error:', result.error);
+      return [];
+    }
 
+    // Generate suggestions based on content analysis and keywords
+    const suggestions = [];
+    const sentences = content.split(/[.!?]+/);
+
+    // Add suggestions based on content analysis
+    if (result.scores && result.labels) {
+      for (let i = 0; i < result.scores.length; i++) {
+        if (result.scores[i] > 0.5) { // Only use high confidence matches
+          const relevantSentence = sentences.find(s => 
+            s.toLowerCase().includes(result.labels[i].toLowerCase())
+          );
+
+          if (relevantSentence) {
+            suggestions.push({
+              suggestedAnchorText: result.labels[i],
+              context: relevantSentence.trim(),
+              matchType: result.scores[i] > 0.8 ? 'high_relevance' : 'medium_relevance',
+              relevanceScore: result.scores[i]
+            });
+          }
+        }
+      }
+    }
+
+    // Add keyword-based suggestions
+    for (const keyword of topKeywords) {
+      const relevantSentence = sentences.find(s => 
+        s.toLowerCase().includes(keyword.toLowerCase())
+      );
+
+      if (relevantSentence) {
+        suggestions.push({
+          suggestedAnchorText: keyword,
+          context: relevantSentence.trim(),
+          matchType: 'keyword_based',
+          relevanceScore: 0.7 // Default score for keyword matches
+        });
+      }
+    }
+
+    console.log('Generated suggestions:', suggestions);
     return suggestions;
+
   } catch (error) {
     console.error('Error generating suggestions:', error);
     return [];
   }
-}
-
-function findRelevantContext(content: string, keyword: string): string {
-  const sentences = content.split(/[.!?]+/);
-  const relevantSentence = sentences.find(s => 
-    s.toLowerCase().includes(keyword.toLowerCase())
-  );
-  return relevantSentence?.trim() || 'Related content';
 }
