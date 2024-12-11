@@ -20,24 +20,20 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
-    const response = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ url })
+    const { data, error } = await supabase.functions.invoke('analyze', {
+      body: { url }
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to analyze page');
+    if (error) {
+      console.error("Analysis error:", error);
+      throw new Error(error.message);
     }
 
-    const data = await response.json();
-    console.log("Analysis response:", data);
+    console.log("Raw API response:", data);
 
     return {
       keywords: data.keywords || { exact_match: [], broad_match: [], related_match: [] },
-      outboundSuggestions: data.outboundSuggestions || []
+      outboundSuggestions: Array.isArray(data.outboundSuggestions) ? data.outboundSuggestions : []
     };
   } catch (error) {
     console.error("Error in page analysis:", error);

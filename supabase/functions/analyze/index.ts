@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts"
+import { extractContent } from "./content-extractor.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,7 +9,6 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -22,59 +22,25 @@ serve(async (req) => {
     }
 
     // Extract content from the webpage
-    const response = await fetch(url);
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const extractedContent = await extractContent(url);
+    console.log('Content extracted successfully');
 
-    if (!doc) {
-      throw new Error('Failed to parse webpage');
-    }
+    // Extract keywords using basic NLP
+    const keywords = extractKeywords(extractedContent.content);
+    console.log('Keywords extracted:', keywords);
 
-    const title = doc.querySelector('title')?.textContent || '';
-    const content = extractContent(doc);
-    const mainKeywords = extractKeywords(content);
-    
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    console.log('Saving analysis results to database');
-
-    const { data, error } = await supabase
-      .from('page_analysis')
-      .insert({
-        url,
-        title,
-        content,
-        main_keywords: mainKeywords,
-        outbound_links_count: 0,
-        inbound_links_count: 0,
-        link_score: 0
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
-
-    console.log('Analysis saved successfully:', data);
+    // Generate link suggestions based on keywords
+    const suggestions = generateLinkSuggestions(extractedContent.content, keywords);
+    console.log('Generated suggestions:', suggestions);
 
     return new Response(
       JSON.stringify({
-        pageContents: [{
-          url,
-          title,
-          content,
-          mainKeywords,
-          internalLinksCount: 0,
-          externalLinksCount: 0
-        }],
-        outboundSuggestions: [],
-        inboundSuggestions: [],
-        linkScore: 0
+        keywords: {
+          exact_match: keywords.slice(0, 5),
+          broad_match: keywords.slice(5, 10),
+          related_match: keywords.slice(10, 15)
+        },
+        outboundSuggestions: suggestions
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -92,35 +58,6 @@ serve(async (req) => {
   }
 });
 
-function extractContent(doc: Document): string {
-  const contentSelectors = [
-    'main',
-    'article',
-    '.content',
-    '[role="main"]',
-    '.post-content',
-    '.entry-content'
-  ];
-
-  let content = '';
-  
-  // Try each selector
-  for (const selector of contentSelectors) {
-    const element = doc.querySelector(selector);
-    if (element) {
-      content = element.textContent || '';
-      break;
-    }
-  }
-
-  // Fallback to body if no content found
-  if (!content) {
-    content = doc.body?.textContent || '';
-  }
-
-  return content.trim();
-}
-
 function extractKeywords(content: string): string[] {
   const words = content.toLowerCase()
     .split(/\W+/)
@@ -132,6 +69,33 @@ function extractKeywords(content: string): string[] {
 
   return Object.entries(words)
     .sort(([, a], [, b]) => b - a)
-    .slice(0, 10)
+    .slice(0, 15)
     .map(([word]) => word);
+}
+
+function generateLinkSuggestions(content: string, keywords: string[]): Array<{
+  suggestedAnchorText: string;
+  context: string;
+  matchType: string;
+  relevanceScore: number;
+}> {
+  const suggestions = [];
+  const paragraphs = content.split('\n').filter(p => p.trim().length > 0);
+
+  for (const keyword of keywords.slice(0, 5)) {
+    const relevantParagraph = paragraphs.find(p => 
+      p.toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    if (relevantParagraph) {
+      suggestions.push({
+        suggestedAnchorText: keyword,
+        context: relevantParagraph.substring(0, 200) + '...',
+        matchType: 'keyword',
+        relevanceScore: 0.8
+      });
+    }
+  }
+
+  return suggestions;
 }
