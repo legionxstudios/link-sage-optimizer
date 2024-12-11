@@ -18,78 +18,70 @@ try:
 except Exception as e:
     logger.error(f"Error downloading NLTK data: {e}")
 
-async def validate_seo_keywords(phrases: List[str], content: str) -> Dict[str, float]:
-    """Validate keyword phrases using HuggingFace API for SEO relevance."""
+async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[str, float]:
+    """Analyze content and phrases in a single batch request."""
     try:
-        logger.info(f"Starting SEO validation for {len(phrases)} phrases")
-        logger.info(f"Sample phrases to validate: {phrases[:5]}")
-        
         api_key = os.getenv('HUGGING_FACE_API_KEY')
         if not api_key:
             logger.error("No HuggingFace API key found!")
             return {}
 
-        # Create content-based labels for better context
-        content_snippet = content[:500]  # Use shorter snippet for more focused analysis
-        logger.info(f"Using content snippet for context: {content_snippet[:100]}...")
+        # Prepare content summary for context (first paragraph or two)
+        content_summary = ". ".join(sent_tokenize(content)[:3])
+        logger.info(f"Using content summary: {content_summary[:200]}...")
+
+        # Photography-specific categories for classification
+        categories = [
+            "photography equipment",
+            "photography technique",
+            "photo editing",
+            "camera settings",
+            "photography tutorial",
+            "photography business",
+            "irrelevant"
+        ]
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # First, analyze content theme
-            theme_response = await client.post(
+            # Single batch request for all phrases
+            inputs = [
+                f"Content about photography: {content_summary}\nPhrase to evaluate: {phrase}"
+                for phrase in phrases
+            ]
+            
+            logger.info(f"Making batch request for {len(phrases)} phrases")
+            
+            response = await client.post(
                 "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
                 headers={"Authorization": f"Bearer {api_key}"},
                 json={
-                    "inputs": content_snippet,
+                    "inputs": inputs,
                     "parameters": {
-                        "candidate_labels": [
-                            "photography tutorial",
-                            "camera equipment",
-                            "photo editing",
-                            "photography business",
-                            "photography techniques"
-                        ]
+                        "candidate_labels": categories,
+                        "multi_label": False
                     }
                 }
             )
-            
-            theme_result = theme_response.json()
-            logger.info(f"Theme analysis response: {theme_result}")
-            
-            if "error" in theme_result:
-                logger.error(f"Theme API error: {theme_result['error']}")
-                return {}
 
-            # Now validate each phrase in context
-            validated_scores = {}
-            for phrase in phrases:
+            results = response.json()
+            logger.info(f"Received batch results: {results[:2]}...")  # Log first two results
+
+            # Process results and assign scores
+            scores = {}
+            for phrase, result in zip(phrases, results):
                 try:
-                    response = await client.post(
-                        "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-                        headers={"Authorization": f"Bearer {api_key}"},
-                        json={
-                            "inputs": f"Context: {content_snippet}\nKeyword: {phrase}",
-                            "parameters": {
-                                "candidate_labels": ["relevant seo keyword", "irrelevant phrase"],
-                                "multi_label": False
-                            }
-                        }
-                    )
-                    
-                    result = response.json()
-                    logger.info(f"Validation result for '{phrase}': {result}")
-                    
-                    if "scores" in result and result["labels"][0] == "relevant seo keyword":
-                        validated_scores[phrase] = result["scores"][0]
-                    
+                    # Skip if the top category is "irrelevant"
+                    if result["labels"][0] != "irrelevant":
+                        # Weight score based on photography relevance
+                        scores[phrase] = result["scores"][0]
+                        logger.info(f"Phrase '{phrase}' scored {scores[phrase]} for category {result['labels'][0]}")
                 except Exception as e:
-                    logger.error(f"Error validating phrase '{phrase}': {e}")
+                    logger.error(f"Error processing result for '{phrase}': {e}")
                     continue
 
-            logger.info(f"Validation complete. Found {len(validated_scores)} relevant keywords")
-            return validated_scores
-            
+            return scores
+
     except Exception as e:
-        logger.error(f"Error in SEO validation: {e}")
+        logger.error(f"Error in content relevance analysis: {e}")
         return {}
 
 def extract_keywords(content: str) -> Dict[str, List[str]]:
@@ -113,9 +105,9 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
             tokens = word_tokenize(sentence)
             pos_tags = pos_tag(tokens)
             
-            # Look for 2-3 word phrases with specific patterns
-            for i in range(len(pos_tags) - 2):
-                # Two word phrases (noun phrases, verb phrases)
+            # Look for noun phrases and technical terms
+            for i in range(len(pos_tags) - 1):
+                # Two word phrases (noun phrases, technical terms)
                 if (pos_tags[i][1].startswith(('JJ', 'NN', 'VB')) and 
                     pos_tags[i+1][1].startswith('NN')):
                     
@@ -123,50 +115,46 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
                     if not any(word in stop_words for word in phrase.split()):
                         seo_phrases.append(phrase)
                 
-                # Three word phrases (more complex patterns)
+                # Three word phrases (more specific terms)
                 if (i < len(pos_tags) - 2 and
-                    pos_tags[i][1].startswith(('JJ', 'NN', 'VB')) and 
-                    pos_tags[i+1][1].startswith(('JJ', 'NN')) and 
+                    pos_tags[i][1].startswith(('JJ', 'NN')) and 
+                    pos_tags[i+1][1].startswith('NN') and 
                     pos_tags[i+2][1].startswith('NN')):
                     
                     phrase = f"{pos_tags[i][0].lower()} {pos_tags[i+1][0].lower()} {pos_tags[i+2][0].lower()}"
                     if not any(word in stop_words for word in phrase.split()):
                         seo_phrases.append(phrase)
         
-        logger.info(f"Extracted {len(seo_phrases)} potential SEO phrases")
-        logger.info(f"Sample phrases before validation: {seo_phrases[:5]}")
-        
         # Remove duplicates while preserving order
         unique_phrases = list(dict.fromkeys(seo_phrases))
+        logger.info(f"Extracted {len(unique_phrases)} unique phrases")
         
-        # Validate phrases with HuggingFace API
-        seo_scores = await validate_seo_keywords(unique_phrases, content)
-        logger.info(f"Received validation scores for {len(seo_scores)} phrases")
+        # Get relevance scores for all phrases in one batch
+        scores = await analyze_content_relevance(content, unique_phrases)
+        logger.info(f"Received scores for {len(scores)} phrases")
         
-        # Sort phrases by SEO relevance score
-        scored_phrases = [
-            (phrase, seo_scores.get(phrase, 0))
-            for phrase in unique_phrases
-        ]
-        scored_phrases.sort(key=lambda x: x[1], reverse=True)
+        # Categorize phrases based on scores
+        exact_match = []
+        broad_match = []
+        related_match = []
         
-        # Split into categories based on score thresholds
-        exact_threshold = 0.8
-        broad_threshold = 0.6
+        for phrase, score in scores.items():
+            if score >= 0.8:
+                exact_match.append(phrase)
+            elif score >= 0.6:
+                broad_match.append(phrase)
+            elif score >= 0.4:
+                related_match.append(phrase)
         
-        exact_match = [phrase for phrase, score in scored_phrases if score >= exact_threshold]
-        broad_match = [phrase for phrase, score in scored_phrases if exact_threshold > score >= broad_threshold]
-        related_match = [phrase for phrase, score in scored_phrases if broad_threshold > score >= 0.4]
-        
-        logger.info(f"Final results:")
-        logger.info(f"Exact match keywords ({len(exact_match)}): {exact_match[:5]}")
-        logger.info(f"Broad match keywords ({len(broad_match)}): {broad_match[:5]}")
-        logger.info(f"Related match keywords ({len(related_match)}): {related_match[:5]}")
+        logger.info(f"Categorized keywords:")
+        logger.info(f"Exact matches: {len(exact_match)}")
+        logger.info(f"Broad matches: {len(broad_match)}")
+        logger.info(f"Related matches: {len(related_match)}")
         
         return {
-            'exact_match': exact_match[:15],  # Top 15 exact matches
-            'broad_match': broad_match[:15],  # Top 15 broad matches
-            'related_match': related_match[:15]  # Top 15 related matches
+            'exact_match': exact_match[:15],
+            'broad_match': broad_match[:15],
+            'related_match': related_match[:15]
         }
         
     except Exception as e:
