@@ -1,7 +1,7 @@
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
-import { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-export async function processSitemap(sitemapUrl: string, supabase: SupabaseClient) {
+export async function processSitemap(sitemapUrl: string, supabase: any) {
   console.log('Processing sitemap:', sitemapUrl);
   
   try {
