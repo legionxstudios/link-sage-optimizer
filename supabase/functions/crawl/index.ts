@@ -31,7 +31,8 @@ serve(async (req) => {
       );
     }
 
-    const domain = parsedUrl.hostname;
+    // Sanitize domain by removing any special characters and converting to lowercase
+    const domain = parsedUrl.hostname.toLowerCase().trim();
     console.log(`Processing domain: ${domain}`);
     
     // Initialize Supabase client
@@ -48,168 +49,183 @@ serve(async (req) => {
 
     // First check if website exists
     console.log('Checking for existing website record...');
-    const { data: existingWebsite, error: fetchError } = await supabase
-      .from('websites')
-      .select()
-      .eq('domain', domain)
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error('Error fetching website:', fetchError);
-      throw new Error(`Database error: ${fetchError.message}`);
-    }
-
     let website;
-    if (existingWebsite) {
-      console.log('Found existing website, updating last_crawled_at');
-      const { data: updatedWebsite, error: updateError } = await supabase
+    
+    try {
+      const { data: existingWebsite, error: fetchError } = await supabase
         .from('websites')
-        .update({ last_crawled_at: new Date().toISOString() })
-        .eq('id', existingWebsite.id)
         .select()
+        .eq('domain', domain)
         .single();
 
-      if (updateError) {
-        console.error('Error updating website:', updateError);
-        throw new Error(`Failed to update website: ${updateError.message}`);
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('Error fetching website:', fetchError);
+        throw new Error(`Database error: ${fetchError.message}`);
       }
-      website = updatedWebsite;
-    } else {
-      console.log('Creating new website record');
-      const { data: newWebsite, error: createError } = await supabase
-        .from('websites')
-        .insert([{
-          domain,
-          last_crawled_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
 
-      if (createError) {
-        console.error('Error creating website:', createError);
-        throw new Error(`Failed to create website: ${createError.message}`);
-      }
-      website = newWebsite;
-    }
+      if (existingWebsite) {
+        console.log('Found existing website, updating last_crawled_at');
+        const { data: updatedWebsite, error: updateError } = await supabase
+          .from('websites')
+          .update({ last_crawled_at: new Date().toISOString() })
+          .eq('id', existingWebsite.id)
+          .select()
+          .single();
 
-    if (!website) {
-      throw new Error('Failed to get website record');
-    }
-
-    console.log('Successfully got website record:', website);
-
-    // Initialize crawl state
-    const visited = new Set<string>();
-    const toVisit = new Set([url]);
-    const websiteId = website.id;
-
-    // Start crawling
-    while (toVisit.size > 0 && visited.size < maxPages) {
-      const currentUrl = Array.from(toVisit)[0];
-      toVisit.delete(currentUrl);
-
-      if (visited.has(currentUrl)) continue;
-      visited.add(currentUrl);
-
-      try {
-        console.log(`Crawling ${currentUrl}`);
-        const response = await fetch(currentUrl);
-        if (!response.ok) {
-          console.warn(`Failed to fetch ${currentUrl}: ${response.status}`);
-          continue;
+        if (updateError) {
+          console.error('Error updating website:', updateError);
+          throw new Error(`Failed to update website: ${updateError.message}`);
         }
-
-        const html = await response.text();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-
-        if (!doc) {
-          console.warn(`Failed to parse HTML for ${currentUrl}`);
-          continue;
-        }
-
-        // Extract page content
-        const title = doc.querySelector('title')?.textContent || '';
-        const content = extractContent(doc);
-
-        // Save page
-        console.log(`Saving page: ${currentUrl}`);
-        const { data: page, error: pageError } = await supabase
-          .from('pages')
-          .upsert({
-            website_id: websiteId,
-            url: currentUrl,
-            title,
-            content,
+        website = updatedWebsite;
+      } else {
+        console.log('Creating new website record');
+        const { data: newWebsite, error: createError } = await supabase
+          .from('websites')
+          .insert({
+            domain,
             last_crawled_at: new Date().toISOString()
-          }, {
-            onConflict: 'url'
           })
           .select()
           .single();
 
-        if (pageError) {
-          console.error(`Error saving page ${currentUrl}:`, pageError);
-          continue;
+        if (createError) {
+          console.error('Error creating website:', createError);
+          throw new Error(`Failed to create website: ${createError.message}`);
         }
+        website = newWebsite;
+      }
 
-        console.log(`Successfully saved page: ${currentUrl}`);
+      if (!website) {
+        throw new Error('Failed to get website record');
+      }
 
-        // Process links
-        const links = doc.querySelectorAll('a[href]');
-        for (const link of links) {
-          const href = link.getAttribute('href');
-          if (!href) continue;
+      console.log('Successfully got website record:', website);
 
-          try {
-            const absoluteUrl = new URL(href, currentUrl).toString();
-            const isInternal = new URL(absoluteUrl).hostname === domain;
+      // Initialize crawl state
+      const visited = new Set<string>();
+      const toVisit = new Set([url]);
+      const websiteId = website.id;
 
-            if (isInternal && !visited.has(absoluteUrl)) {
-              toVisit.add(absoluteUrl);
-            }
+      // Start crawling
+      while (toVisit.size > 0 && visited.size < maxPages) {
+        const currentUrl = Array.from(toVisit)[0];
+        toVisit.delete(currentUrl);
 
-            // Save link
-            const { error: linkError } = await supabase
-              .from('links')
-              .insert({
-                source_page_id: page.id,
-                anchor_text: link.textContent?.trim() || '',
-                context: extractLinkContext(link),
-                is_internal: isInternal
-              });
+        if (visited.has(currentUrl)) continue;
+        visited.add(currentUrl);
 
-            if (linkError) {
-              console.error(`Error saving link ${href}:`, linkError);
-            }
-
-          } catch (e) {
-            console.error(`Error processing link ${href}:`, e);
+        try {
+          console.log(`Crawling ${currentUrl}`);
+          const response = await fetch(currentUrl);
+          if (!response.ok) {
+            console.warn(`Failed to fetch ${currentUrl}: ${response.status}`);
+            continue;
           }
+
+          const html = await response.text();
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+
+          if (!doc) {
+            console.warn(`Failed to parse HTML for ${currentUrl}`);
+            continue;
+          }
+
+          // Extract page content
+          const title = doc.querySelector('title')?.textContent || '';
+          const content = extractContent(doc);
+
+          // Save page
+          console.log(`Saving page: ${currentUrl}`);
+          const { data: page, error: pageError } = await supabase
+            .from('pages')
+            .upsert({
+              website_id: websiteId,
+              url: currentUrl,
+              title,
+              content,
+              last_crawled_at: new Date().toISOString()
+            }, {
+              onConflict: 'url'
+            })
+            .select()
+            .single();
+
+          if (pageError) {
+            console.error(`Error saving page ${currentUrl}:`, pageError);
+            continue;
+          }
+
+          console.log(`Successfully saved page: ${currentUrl}`);
+
+          // Process links
+          const links = doc.querySelectorAll('a[href]');
+          for (const link of links) {
+            const href = link.getAttribute('href');
+            if (!href) continue;
+
+            try {
+              const absoluteUrl = new URL(href, currentUrl).toString();
+              const isInternal = new URL(absoluteUrl).hostname === domain;
+
+              if (isInternal && !visited.has(absoluteUrl)) {
+                toVisit.add(absoluteUrl);
+              }
+
+              // Save link
+              const { error: linkError } = await supabase
+                .from('links')
+                .insert({
+                  source_page_id: page.id,
+                  anchor_text: link.textContent?.trim() || '',
+                  context: extractLinkContext(link),
+                  is_internal: isInternal
+                });
+
+              if (linkError) {
+                console.error(`Error saving link ${href}:`, linkError);
+              }
+
+            } catch (e) {
+              console.error(`Error processing link ${href}:`, e);
+            }
+          }
+
+          // Small delay to be nice to the server
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+        } catch (e) {
+          console.error(`Error crawling ${currentUrl}:`, e);
         }
-
-        // Small delay to be nice to the server
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-      } catch (e) {
-        console.error(`Error crawling ${currentUrl}:`, e);
       }
+
+      console.log('Crawl completed successfully');
+      return new Response(
+        JSON.stringify({
+          success: true,
+          pagesProcessed: visited.size,
+          domain
+        }),
+        { 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      );
+
+    } catch (error) {
+      console.error('Error in website processing:', error);
+      return new Response(
+        JSON.stringify({ 
+          error: error.message,
+          details: error
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
-
-    console.log('Crawl completed successfully');
-    return new Response(
-      JSON.stringify({
-        success: true,
-        pagesProcessed: visited.size,
-        domain
-      }),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
-    );
-
   } catch (error) {
     console.error('Error:', error);
     return new Response(
