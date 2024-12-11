@@ -65,6 +65,7 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
 
             result = response.json()
             logger.info("Received OpenAI response")
+            logger.info(f"OpenAI response: {result}")  # Added for debugging
 
             try:
                 # Extract the JSON from the response content
