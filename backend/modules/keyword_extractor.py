@@ -21,44 +21,75 @@ except Exception as e:
 async def validate_seo_keywords(phrases: List[str], content: str) -> Dict[str, float]:
     """Validate keyword phrases using HuggingFace API for SEO relevance."""
     try:
-        logger.info(f"Validating {len(phrases)} potential SEO phrases with HuggingFace API")
-        logger.info(f"Sample phrases: {phrases[:5]}")
+        logger.info(f"Starting SEO validation for {len(phrases)} phrases")
+        logger.info(f"Sample phrases to validate: {phrases[:5]}")
         
+        api_key = os.getenv('HUGGING_FACE_API_KEY')
+        if not api_key:
+            logger.error("No HuggingFace API key found!")
+            return {}
+
+        # Create content-based labels for better context
+        content_snippet = content[:500]  # Use shorter snippet for more focused analysis
+        logger.info(f"Using content snippet for context: {content_snippet[:100]}...")
+
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # Use content snippet as context for relevance checking
-            context = content[:1000]  # Use first 1000 chars as context
-            
-            api_key = os.getenv('HUGGING_FACE_API_KEY')
-            if not api_key:
-                logger.error("No HuggingFace API key found!")
-                return {}
-                
-            logger.info("Making request to HuggingFace API...")
-            response = await client.post(
+            # First, analyze content theme
+            theme_response = await client.post(
                 "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
                 headers={"Authorization": f"Bearer {api_key}"},
                 json={
-                    "inputs": context,
+                    "inputs": content_snippet,
                     "parameters": {
-                        "candidate_labels": phrases,
-                        "multi_label": True
+                        "candidate_labels": [
+                            "photography tutorial",
+                            "camera equipment",
+                            "photo editing",
+                            "photography business",
+                            "photography techniques"
+                        ]
                     }
                 }
             )
             
-            result = response.json()
-            logger.info(f"HuggingFace API Response: {result}")
+            theme_result = theme_response.json()
+            logger.info(f"Theme analysis response: {theme_result}")
             
-            if "scores" in result and "labels" in result:
-                scores_dict = dict(zip(result["labels"], result["scores"]))
-                logger.info(f"Successfully validated keywords. Top scores: {dict(sorted(scores_dict.items(), key=lambda x: x[1], reverse=True)[:5])}")
-                return scores_dict
-            
-            logger.error(f"Invalid HuggingFace API response: {result}")
-            return {}
+            if "error" in theme_result:
+                logger.error(f"Theme API error: {theme_result['error']}")
+                return {}
+
+            # Now validate each phrase in context
+            validated_scores = {}
+            for phrase in phrases:
+                try:
+                    response = await client.post(
+                        "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json={
+                            "inputs": f"Context: {content_snippet}\nKeyword: {phrase}",
+                            "parameters": {
+                                "candidate_labels": ["relevant seo keyword", "irrelevant phrase"],
+                                "multi_label": False
+                            }
+                        }
+                    )
+                    
+                    result = response.json()
+                    logger.info(f"Validation result for '{phrase}': {result}")
+                    
+                    if "scores" in result and result["labels"][0] == "relevant seo keyword":
+                        validated_scores[phrase] = result["scores"][0]
+                    
+                except Exception as e:
+                    logger.error(f"Error validating phrase '{phrase}': {e}")
+                    continue
+
+            logger.info(f"Validation complete. Found {len(validated_scores)} relevant keywords")
+            return validated_scores
             
     except Exception as e:
-        logger.error(f"Error validating SEO keywords: {e}")
+        logger.error(f"Error in SEO validation: {e}")
         return {}
 
 def extract_keywords(content: str) -> Dict[str, List[str]]:
