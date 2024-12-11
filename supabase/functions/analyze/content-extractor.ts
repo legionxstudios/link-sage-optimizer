@@ -3,37 +3,28 @@ import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts
 export async function extractContent(url: string) {
   console.log('Extracting content from:', url);
   
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; AnalyzerBot/1.0)'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; AnalyzerBot/1.0)'
     }
+  });
+  
+  const html = await response.text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-
-    if (!doc) {
-      throw new Error('Failed to parse webpage');
-    }
-
-    const title = doc.querySelector('title')?.textContent || '';
-    const mainContent = extractMainContent(doc);
-    const links = extractLinks(doc);
-
-    return {
-      title,
-      content: mainContent,
-      links
-    };
-  } catch (error) {
-    console.error('Error extracting content:', error);
-    throw error;
+  if (!doc) {
+    throw new Error('Failed to parse webpage');
   }
+
+  const title = doc.querySelector('title')?.textContent || '';
+  const mainContent = extractMainContent(doc);
+  const links = extractLinks(doc);
+
+  return {
+    title,
+    content: mainContent,
+    links
+  };
 }
 
 function extractMainContent(doc: Document): string {
@@ -43,25 +34,18 @@ function extractMainContent(doc: Document): string {
     '.content',
     '[role="main"]',
     '.post-content',
-    '.entry-content',
-    '#content'
+    '.entry-content'
   ];
 
-  let content = '';
   for (const selector of contentSelectors) {
     const element = doc.querySelector(selector);
     if (element) {
-      content = element.textContent || '';
-      break;
+      return element.textContent?.trim() || '';
     }
   }
 
-  // Fallback to body if no content found
-  if (!content) {
-    content = doc.body?.textContent || '';
-  }
-
-  return content.trim();
+  // Fallback to body content
+  return (doc.body?.textContent || '').trim();
 }
 
 function extractLinks(doc: Document) {
