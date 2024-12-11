@@ -1,33 +1,22 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.3";
 import { logger } from "./logger.ts";
 
-interface LinkSuggestion {
-  suggestedAnchorText: string;
-  context: string;
-  relevanceScore: number;
-  targetUrl: string;
+interface Page {
+  url: string;
+  title?: string;
+  content?: string;
 }
 
-export async function generateSEOSuggestions(content: string, keywords: string[], sourceUrl: string): Promise<LinkSuggestion[]> {
+export async function generateSEOSuggestions(
+  content: string, 
+  keywords: string[], 
+  sourceUrl: string,
+  relevantPages: Page[]
+) {
   try {
     logger.info('Generating SEO suggestions for URL:', sourceUrl);
-    
-    // Initialize Supabase client to fetch existing pages
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    logger.info('Found relevant pages:', relevantPages.length);
 
-    // Get existing pages from the database
-    const { data: existingPages } = await supabase
-      .from('pages')
-      .select('url, title, content')
-      .neq('url', sourceUrl)
-      .limit(20);
-
-    logger.info('Found existing pages:', existingPages?.length);
-
-    const suggestions: LinkSuggestion[] = [];
+    const suggestions = [];
     const sentences = content.split(/[.!?]+/);
 
     // For each keyword found in the content
@@ -40,22 +29,24 @@ export async function generateSEOSuggestions(content: string, keywords: string[]
       if (relevantSentences.length === 0) continue;
 
       // Find pages that contain this keyword
-      const relevantPages = existingPages?.filter(page => 
+      const matchingPages = relevantPages.filter(page => 
         page.content?.toLowerCase().includes(keyword.toLowerCase()) ||
         page.title?.toLowerCase().includes(keyword.toLowerCase())
-      ) || [];
+      );
 
-      logger.info(`Found ${relevantPages.length} relevant pages for keyword: ${keyword}`);
+      logger.info(`Found ${matchingPages.length} matching pages for keyword: ${keyword}`);
 
-      // For each relevant page, create a suggestion
-      for (const page of relevantPages) {
+      // For each matching page, create a suggestion
+      for (const page of matchingPages) {
         if (suggestions.length >= 10) break; // Limit to top 10 suggestions
 
         suggestions.push({
           suggestedAnchorText: keyword,
           context: relevantSentences[0].trim(),
-          relevanceScore: 0.8, // High score for exact keyword matches
-          targetUrl: page.url
+          matchType: "keyword_based",
+          relevanceScore: calculateRelevanceScore(keyword, page),
+          targetUrl: page.url,
+          targetTitle: page.title || ''
         });
       }
     }
@@ -66,4 +57,21 @@ export async function generateSEOSuggestions(content: string, keywords: string[]
     logger.error('Error generating SEO suggestions:', error);
     return [];
   }
+}
+
+function calculateRelevanceScore(keyword: string, page: Page): number {
+  let score = 0;
+  
+  // Check title
+  if (page.title?.toLowerCase().includes(keyword.toLowerCase())) {
+    score += 0.5;
+  }
+  
+  // Check content
+  if (page.content?.toLowerCase().includes(keyword.toLowerCase())) {
+    const frequency = (page.content.toLowerCase().match(new RegExp(keyword.toLowerCase(), 'g')) || []).length;
+    score += Math.min(0.5, frequency * 0.1); // Cap at 0.5
+  }
+  
+  return Math.min(1.0, score);
 }

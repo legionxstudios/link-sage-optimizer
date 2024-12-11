@@ -3,6 +3,7 @@ import { extractContent } from "./content-analyzer.ts"
 import { extractKeywords } from "./keyword-extractor.ts"
 import { generateSEOSuggestions } from "./modules/suggestion-generator.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.3"
+import { processSitemap } from "./sitemap-processor.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,7 +21,6 @@ serve(async (req) => {
     console.log('Received URL:', url)
 
     if (!url || typeof url !== 'string') {
-      console.error('Invalid URL provided')
       throw new Error('Valid URL is required')
     }
 
@@ -47,11 +47,12 @@ serve(async (req) => {
         new Date(existingWebsite.last_crawled_at).getTime() < Date.now() - 7 * 24 * 60 * 60 * 1000) {
       console.log('Domain needs indexing, checking for sitemap...')
       
-      // Try to find sitemap
+      // Try common sitemap locations
       const sitemapUrls = [
         `https://${domain}/sitemap.xml`,
         `https://${domain}/sitemap_index.xml`,
-        `https://${domain}/wp-sitemap.xml`
+        `https://${domain}/wp-sitemap.xml`,
+        `https://${domain}/sitemap/sitemap.xml`
       ]
 
       let sitemapFound = false
@@ -60,30 +61,20 @@ serve(async (req) => {
           const response = await fetch(sitemapUrl)
           if (response.ok) {
             console.log('Found sitemap at:', sitemapUrl)
-            
-            // Process sitemap
-            const { data: processingResponse, error: processingError } = await supabase.functions.invoke('process-sitemap', {
-              body: { sitemapUrl }
-            })
-
-            if (processingError) {
-              console.error('Error processing sitemap:', processingError)
-            } else {
-              console.log('Sitemap processed:', processingResponse)
-              sitemapFound = true
-              break
-            }
+            await processSitemap(sitemapUrl, supabase)
+            sitemapFound = true
+            break
           }
         } catch (e) {
           console.log(`No sitemap found at ${sitemapUrl}`)
         }
       }
 
-      // Fallback to crawling if no sitemap found
+      // If no sitemap found, initiate crawl
       if (!sitemapFound) {
         console.log('No sitemap found, initiating crawl...')
         const { data: crawlResponse, error: crawlError } = await supabase.functions.invoke('crawl', {
-          body: { url, maxPages: 50 }
+          body: { url, maxPages: 100 }
         })
 
         if (crawlError) {
@@ -93,22 +84,31 @@ serve(async (req) => {
 
         console.log('Crawl completed:', crawlResponse)
       }
-    } else {
-      console.log('Domain already indexed recently')
     }
 
-    const mainContent = await extractContent(url);
-    const keywords = await extractKeywords(mainContent.content);
-    const suggestions = await generateSEOSuggestions(mainContent.content, keywords.exact_match, url);
+    // Get relevant pages from database for suggestions
+    const { data: relevantPages } = await supabase
+      .from('pages')
+      .select('url, title, content')
+      .eq('website_id', existingWebsite?.id)
+      .neq('url', url)
+      .limit(50)
+
+    console.log(`Found ${relevantPages?.length || 0} relevant pages for suggestions`)
+
+    // Extract content and generate suggestions
+    const mainContent = await extractContent(url)
+    const keywords = await extractKeywords(mainContent.content)
+    const suggestions = await generateSEOSuggestions(mainContent.content, keywords.exact_match, url, relevantPages || [])
 
     return new Response(
       JSON.stringify({
-        mainContent,
         keywords,
-        suggestions
+        suggestions,
+        pagesAnalyzed: relevantPages?.length || 0
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    )
 
   } catch (error) {
     console.error('Error in analysis:', error)
