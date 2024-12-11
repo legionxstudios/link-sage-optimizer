@@ -43,21 +43,27 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
                     "messages": [
                         {
                             "role": "system",
-                            "content": """You are a photography SEO expert. Analyze the content and phrases provided, 
-                            and score each phrase based on its relevance to photography and SEO value. 
-                            Focus on technical terms, equipment names, photography techniques, and industry terminology."""
+                            "content": """You are a photography SEO expert. Extract and score multi-word photography-related phrases (2-3 words) from the content.
+                            Focus on:
+                            - Photography techniques (e.g., 'long exposure', 'golden hour photography')
+                            - Camera equipment (e.g., 'wide angle lens', 'tripod mount')
+                            - Photography concepts (e.g., 'depth field', 'rule thirds')
+                            - Photography services (e.g., 'wedding photography', 'portrait session')
+                            
+                            Only return multi-word phrases, no single words."""
                         },
                         {
                             "role": "user",
                             "content": f"""Content: {content_summary}\n\nPhrases to evaluate: {json.dumps(phrases)}
                             
-                            For each phrase, return a relevance score between 0 and 1, where:
-                            1.0 = Highly relevant photography term or concept
+                            For each multi-word phrase, return a relevance score between 0 and 1, where:
+                            1.0 = Essential photography term or concept
                             0.8 = Important photography-related phrase
                             0.6 = Generally relevant to photography
                             0.4 or below = Not very relevant
                             
-                            Return only a JSON object with phrases as keys and scores as values."""
+                            Return only a JSON object with multi-word phrases as keys and scores as values.
+                            Ignore single-word terms completely."""
                         }
                     ]
                 }
@@ -65,7 +71,7 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
 
             result = response.json()
             logger.info("Received OpenAI response")
-            logger.info(f"OpenAI response: {result}")  # Added for debugging
+            logger.info(f"OpenAI response: {result}")
 
             try:
                 # Extract the JSON from the response content
@@ -131,18 +137,20 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
         scores = await analyze_content_relevance(content, unique_phrases)
         logger.info(f"Received scores for {len(scores)} phrases")
         
-        # Categorize phrases based on scores
+        # Filter out single-word phrases and categorize remaining ones based on scores
         exact_match = []
         broad_match = []
         related_match = []
         
         for phrase, score in scores.items():
-            if score >= 0.8:
-                exact_match.append(phrase)
-            elif score >= 0.6:
-                broad_match.append(phrase)
-            elif score >= 0.4:
-                related_match.append(phrase)
+            # Only include multi-word phrases
+            if len(phrase.split()) > 1:
+                if score >= 0.8:
+                    exact_match.append(phrase)
+                elif score >= 0.6:
+                    broad_match.append(phrase)
+                elif score >= 0.4:
+                    related_match.append(phrase)
         
         logger.info(f"Categorized keywords:")
         logger.info(f"Exact matches: {len(exact_match)}")
