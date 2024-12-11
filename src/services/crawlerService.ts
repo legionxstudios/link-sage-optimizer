@@ -46,13 +46,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
         seo_keywords: analysisData.keywords || {},
         suggestions: analysisData.outboundSuggestions,
         created_at: new Date().toISOString()
-      }, {
-        onConflict: 'url'
-      });
+      })
+      .select();
 
     if (dbError) {
       console.error("Error storing analysis:", dbError);
-      // Continue anyway since we have the analysis results
+      throw new Error(`Database error: ${dbError.message}`);
     }
 
     return {
