@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 import { extractContent } from "./content-extractor.ts";
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,6 +14,7 @@ const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -39,17 +40,28 @@ serve(async (req) => {
     const domain = urlObj.hostname;
 
     // Fetch other pages from the same website
+    const { data: website } = await supabase
+      .from('websites')
+      .select('id')
+      .eq('domain', domain)
+      .single();
+
+    if (!website) {
+      console.log('Website not found in database');
+      return new Response(
+        JSON.stringify({
+          keywords: { exact_match: [], broad_match: [], related_match: [] },
+          outboundSuggestions: []
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const { data: pages, error: pagesError } = await supabase
       .from('pages')
       .select('id, url, title, content')
-      .neq('url', url)
-      .eq('website_id', (
-        await supabase
-          .from('websites')
-          .select('id')
-          .eq('domain', domain)
-          .single()
-      ).data?.id);
+      .eq('website_id', website.id)
+      .neq('url', url);
 
     if (pagesError) {
       console.error('Error fetching pages:', pagesError);
