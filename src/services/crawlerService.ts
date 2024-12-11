@@ -34,7 +34,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     console.log("Raw API response:", analysisData);
 
-    // Store the analysis results in the database
+    // Store the analysis results in the database using upsert
     const { error: dbError } = await supabase
       .from('page_analysis')
       .upsert({
@@ -46,8 +46,10 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
         seo_keywords: analysisData.keywords || {},
         suggestions: analysisData.outboundSuggestions,
         created_at: new Date().toISOString()
-      })
-      .select();
+      }, {
+        onConflict: 'url',
+        ignoreDuplicates: false
+      });
 
     if (dbError) {
       console.error("Error storing analysis:", dbError);
