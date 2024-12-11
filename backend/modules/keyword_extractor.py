@@ -44,25 +44,25 @@ async def analyze_content_relevance(content: str, phrases: List[str]) -> Dict[st
                         {
                             "role": "system",
                             "content": """You are an SEO expert. Analyze and score multi-word phrases (2-3 words) based on their relevance and frequency in the content.
-                            Focus on meaningful phrases that represent:
+                            Focus ONLY on meaningful 2-3 word phrases that represent:
                             - Key topics and themes
                             - Important concepts
                             - Product/service descriptions
                             - Industry terminology
                             
-                            Only return phrases with 2-3 words unless a single word is critically important to the page theme."""
+                            DO NOT return single-word phrases unless they are brand names or absolutely critical to the page theme."""
                         },
                         {
                             "role": "user",
                             "content": f"""Content: {content_summary}\n\nPhrases to evaluate: {json.dumps(phrases)}
                             
                             Return a JSON object with phrases as keys and scores as values where:
-                            1.0 = Essential theme/topic of the page
-                            0.8 = Important supporting concept
-                            0.6 = Relevant but secondary phrase
+                            1.0 = Essential theme/topic of the page (must be 2-3 words)
+                            0.8 = Important supporting concept (must be 2-3 words)
+                            0.6 = Relevant but secondary phrase (must be 2-3 words)
                             0.4 or below = Not very relevant
                             
-                            Only include meaningful multi-word phrases unless a single word is critically important."""
+                            ONLY include 2-3 word phrases unless a single word is a brand name or critically important."""
                         }
                     ]
                 }
@@ -125,9 +125,15 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
                     if not any(word in stop_words for word in phrase.split()):
                         phrase_counter[phrase] += 2  # Give slightly higher weight to 3-word phrases
         
+        # Filter out single-word phrases
+        multi_word_phrases = {phrase: count for phrase, count in phrase_counter.items() 
+                            if len(phrase.split()) > 1}
+        
         # Get most common phrases
-        common_phrases = [phrase for phrase, count in phrase_counter.most_common(45)]
-        logger.info(f"Extracted {len(common_phrases)} common phrases")
+        common_phrases = [phrase for phrase, count in sorted(multi_word_phrases.items(), 
+                                                           key=lambda x: x[1], 
+                                                           reverse=True)[:45]]
+        logger.info(f"Extracted {len(common_phrases)} common multi-word phrases")
         
         # Get relevance scores
         scores = await analyze_content_relevance(content, common_phrases)
@@ -137,7 +143,7 @@ def extract_keywords(content: str) -> Dict[str, List[str]]:
         broad_match = []
         related_match = []
         
-        for phrase, count in phrase_counter.most_common(45):
+        for phrase, count in sorted(multi_word_phrases.items(), key=lambda x: x[1], reverse=True)[:45]:
             relevance_score = scores.get(phrase, 0.4)
             if relevance_score >= 0.8:
                 exact_match.append(f"{phrase} ({count})")
