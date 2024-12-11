@@ -6,8 +6,12 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function generateSuggestions(content: string, links: any[], url: string) {
+export async function generateSuggestions(content: string, links: any[], url: string, title: string | null) {
   try {
+    if (!url) {
+      throw new Error('URL is required for suggestion generation');
+    }
+    
     console.log('Starting suggestion generation for URL:', url);
     const suggestions: LinkSuggestion[] = [];
     const existingUrls = new Set(links.map(link => link.url));
@@ -34,7 +38,7 @@ export async function generateSuggestions(content: string, links: any[], url: st
     }
     
     // Store the analysis results
-    await storeAnalysisResults(url, content, themes, keywords, suggestions);
+    await storeAnalysisResults(url, title, content, themes, keywords, suggestions);
     
     console.log('Generated suggestions:', suggestions);
     return suggestions
@@ -43,7 +47,7 @@ export async function generateSuggestions(content: string, links: any[], url: st
       
   } catch (error) {
     console.error('Error generating suggestions:', error);
-    return [];
+    throw error; // Re-throw to handle in the main function
   }
 }
 
@@ -139,26 +143,43 @@ async function generateSEOKeywords(content: string, themes: string[]) {
   }
 }
 
-async function storeAnalysisResults(url: string, content: string, themes: string[], keywords: any[], suggestions: LinkSuggestion[]) {
+async function storeAnalysisResults(
+  url: string, 
+  title: string | null, 
+  content: string, 
+  themes: string[], 
+  keywords: any[], 
+  suggestions: LinkSuggestion[]
+) {
   try {
+    if (!url) {
+      throw new Error('URL is required for storing analysis results');
+    }
+
     console.log('Storing analysis results for URL:', url);
     const { error } = await supabase
       .from('page_analysis')
-      .insert({
+      .upsert({
         url,
+        title: title || '',
         content: content.slice(0, 10000), // Limit content length
         detected_themes: themes,
         seo_keywords: keywords,
-        suggestions: suggestions
+        suggestions: suggestions,
+        created_at: new Date().toISOString()
+      }, {
+        onConflict: 'url'
       });
 
     if (error) {
       console.error('Error storing analysis results:', error);
+      throw error;
     } else {
       console.log('Analysis results stored successfully');
     }
   } catch (error) {
     console.error('Error storing analysis results:', error);
+    throw error;
   }
 }
 

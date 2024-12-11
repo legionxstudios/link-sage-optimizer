@@ -18,8 +18,8 @@ serve(async (req) => {
     const { url } = await req.json();
     console.log('Starting analysis for:', url);
 
-    if (!url) {
-      throw new Error('URL is required');
+    if (!url || typeof url !== 'string') {
+      throw new Error('Valid URL is required');
     }
 
     // Extract content with timeout
@@ -35,23 +35,13 @@ serve(async (req) => {
     // Process in parallel for efficiency
     const [keywords, suggestions] = await Promise.all([
       extractKeywords(content),
-      generateSuggestions(content, links, url)
+      generateSuggestions(content, links, url, title) // Pass title as well
     ]);
 
     const analysisResult = {
       keywords,
       outboundSuggestions: suggestions.slice(0, 10) // Limit suggestions
     };
-
-    // Save analysis asynchronously - don't wait for it
-    savePageAnalysis(url, {
-      title,
-      content: content.slice(0, 10000), // Limit content length
-      keywords,
-      outboundSuggestions: suggestions.slice(0, 10)
-    }).catch(error => {
-      console.error('Error saving analysis:', error);
-    });
 
     console.log('Analysis completed successfully');
     return new Response(
