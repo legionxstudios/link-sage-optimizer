@@ -18,25 +18,30 @@ async def analyze_website_theme(content: str) -> List[str]:
                     "inputs": content[:1000],  # Analyze first 1000 chars for theme
                     "parameters": {
                         "candidate_labels": [
-                            # Core photography types
-                            "wedding photography", "portrait photography", "commercial photography",
-                            "event photography", "family photography", "fashion photography",
+                            # Vintage and Film Photography
+                            "vintage cameras", "polaroid photography", "instant film photography",
+                            "film cameras", "analog photography", "lomography",
+                            "vintage polaroid", "instant cameras", "sx-70 cameras",
                             
-                            # Technical specialties
-                            "studio lighting", "natural light photography", "black and white photography",
-                            "film photography", "digital photography", "macro photography",
+                            # Film Types and Processes
+                            "instant film", "35mm film", "medium format film",
+                            "film development", "darkroom techniques", "film stocks",
                             
-                            # Style-based categories
-                            "fine art photography", "documentary photography", "street photography",
-                            "architectural photography", "landscape photography", "lifestyle photography",
+                            # Camera Types
+                            "rangefinder cameras", "tlr cameras", "folding cameras",
+                            "box cameras", "point and shoot film", "medium format cameras",
                             
-                            # Specific services
-                            "headshot photography", "product photography", "real estate photography",
-                            "food photography", "newborn photography", "engagement photography",
+                            # Modern Photography
+                            "digital photography", "mirrorless cameras", "dslr photography",
+                            "smartphone photography", "computational photography",
                             
-                            # Technical aspects
-                            "composition techniques", "camera settings", "post-processing",
-                            "lighting setup", "location scouting", "equipment reviews"
+                            # Photography Genres
+                            "street photography", "portrait photography", "landscape photography",
+                            "documentary photography", "fashion photography", "product photography",
+                            
+                            # Technical Aspects
+                            "exposure techniques", "composition rules", "lighting setup",
+                            "camera settings", "lens selection", "flash photography"
                         ]
                     }
                 }
