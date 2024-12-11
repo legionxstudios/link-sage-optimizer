@@ -1,6 +1,10 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { LinkSuggestion } from "./types.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function generateSuggestions(content: string, links: any[]) {
   try {
@@ -29,6 +33,9 @@ export async function generateSuggestions(content: string, links: any[]) {
       }
     }
     
+    // Store the analysis results
+    await storeAnalysisResults(content, themes, keywords, suggestions);
+    
     console.log('Generated suggestions:', suggestions);
     return suggestions
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
@@ -55,8 +62,9 @@ async function analyzeTopics(content: string) {
           inputs: content.slice(0, 1000),
           parameters: {
             candidate_labels: [
-              "photography", "portrait photography", "wedding photography",
-              "commercial photography", "event photography"
+              "photography", "portrait photography", 
+              "wedding photography", "commercial photography",
+              "event photography"
             ]
           }
         })
@@ -128,6 +136,27 @@ async function generateSEOKeywords(content: string, themes: string[]) {
   } catch (error) {
     console.error('Error generating SEO keywords:', error);
     return [];
+  }
+}
+
+async function storeAnalysisResults(content: string, themes: string[], keywords: any[], suggestions: LinkSuggestion[]) {
+  try {
+    const { error } = await supabase
+      .from('page_analysis')
+      .insert({
+        content: content.slice(0, 10000), // Limit content length
+        detected_themes: themes,
+        seo_keywords: keywords,
+        suggestions: suggestions
+      });
+
+    if (error) {
+      console.error('Error storing analysis results:', error);
+    } else {
+      console.log('Analysis results stored successfully');
+    }
+  } catch (error) {
+    console.error('Error storing analysis results:', error);
   }
 }
 

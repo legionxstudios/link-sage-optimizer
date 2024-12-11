@@ -72,11 +72,13 @@ export type Database = {
         Row: {
           content: string | null
           created_at: string | null
+          detected_themes: string[] | null
           id: string
           inbound_links_count: number | null
           link_score: number | null
           main_keywords: string[] | null
           outbound_links_count: number | null
+          seo_keywords: Json | null
           suggestions: Json | null
           title: string | null
           url: string
@@ -84,11 +86,13 @@ export type Database = {
         Insert: {
           content?: string | null
           created_at?: string | null
+          detected_themes?: string[] | null
           id?: string
           inbound_links_count?: number | null
           link_score?: number | null
           main_keywords?: string[] | null
           outbound_links_count?: number | null
+          seo_keywords?: Json | null
           suggestions?: Json | null
           title?: string | null
           url: string
@@ -96,11 +100,13 @@ export type Database = {
         Update: {
           content?: string | null
           created_at?: string | null
+          detected_themes?: string[] | null
           id?: string
           inbound_links_count?: number | null
           link_score?: number | null
           main_keywords?: string[] | null
           outbound_links_count?: number | null
+          seo_keywords?: Json | null
           suggestions?: Json | null
           title?: string | null
           url?: string
