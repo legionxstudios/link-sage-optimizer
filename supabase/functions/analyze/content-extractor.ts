@@ -9,6 +9,10 @@ export async function extractContent(url: string) {
     }
   });
   
+  if (!response.ok) {
+    throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+  }
+
   const html = await response.text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
@@ -34,18 +38,25 @@ function extractMainContent(doc: Document): string {
     '.content',
     '[role="main"]',
     '.post-content',
-    '.entry-content'
+    '.entry-content',
+    '#content'
   ];
 
+  let content = '';
   for (const selector of contentSelectors) {
     const element = doc.querySelector(selector);
     if (element) {
-      return element.textContent?.trim() || '';
+      content = element.textContent || '';
+      break;
     }
   }
 
-  // Fallback to body content
-  return (doc.body?.textContent || '').trim();
+  // Fallback to body if no content found
+  if (!content) {
+    content = doc.body?.textContent || '';
+  }
+
+  return content.trim();
 }
 
 function extractLinks(doc: Document) {
