@@ -16,6 +16,11 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
     logger.info('Starting keyword analysis...');
     logger.debug('Content length:', content.length);
     
+    if (!OPENAI_API_KEY) {
+      logger.error('OpenAI API key is not configured');
+      throw new Error('OpenAI API key is not configured');
+    }
+    
     // First try OpenAI for keyword extraction
     try {
       logger.info('Attempting OpenAI keyword extraction...');
@@ -41,6 +46,8 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
       });
 
       if (!openAIResponse.ok) {
+        const errorText = await openAIResponse.text();
+        logger.error(`OpenAI API error: ${openAIResponse.status} ${openAIResponse.statusText}`, errorText);
         throw new Error(`OpenAI API error: ${openAIResponse.status} ${openAIResponse.statusText}`);
       }
 
@@ -48,6 +55,7 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
       logger.debug('OpenAI response:', openAIData);
 
       if (!openAIData.choices?.[0]?.message?.content) {
+        logger.error('Invalid OpenAI response format:', openAIData);
         throw new Error('Invalid OpenAI response format');
       }
 
@@ -58,6 +66,11 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
     } catch (openAIError) {
       logger.error('OpenAI keyword extraction failed:', openAIError);
       logger.info('Falling back to Hugging Face for topic classification...');
+      
+      if (!HF_API_KEY) {
+        logger.error('Hugging Face API key is not configured');
+        throw new Error('Both OpenAI and Hugging Face API keys are not configured');
+      }
       
       // Fallback to Hugging Face
       const topicResponse = await fetch(
@@ -84,6 +97,8 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
       );
 
       if (!topicResponse.ok) {
+        const errorText = await topicResponse.text();
+        logger.error(`Hugging Face API error: ${topicResponse.status} ${topicResponse.statusText}`, errorText);
         throw new Error(`Hugging Face API error: ${topicResponse.status} ${topicResponse.statusText}`);
       }
 
@@ -91,6 +106,7 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
       logger.debug('Topic analysis response:', topicData);
       
       if (!topicData.labels || !topicData.scores) {
+        logger.error('Invalid topic analysis response:', topicData);
         throw new Error('Invalid topic analysis response');
       }
 
