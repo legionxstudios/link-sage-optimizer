@@ -1,79 +1,106 @@
+import { logger } from "./utils/logger.ts";
+
 const HF_API_KEY = Deno.env.get('HUGGING_FACE_API_KEY');
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
+interface OpenAIResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+}
 
 export const analyzeKeywords = async (content: string): Promise<string[]> => {
   try {
-    console.log('Starting keyword analysis...');
+    logger.info('Starting keyword analysis...');
+    logger.debug('Content length:', content.length);
     
-    // First get topic classification
-    const topicResponse = await fetch(
-      "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-      {
-        method: "POST",
+    // First try OpenAI for keyword extraction
+    try {
+      logger.info('Attempting OpenAI keyword extraction...');
+      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
         headers: {
-          "Authorization": `Bearer ${HF_API_KEY}`,
-          "Content-Type": "application/json",
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: content.substring(0, 1000),
-          parameters: {
-            candidate_labels: [
-              "technology", "business", "health", "education", 
-              "entertainment", "sports", "science", "politics", 
-              "lifestyle", "travel"
-            ],
-            multi_label: true
-          }
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an SEO expert. Extract the most important keywords from the given content. Return only a JSON array of strings.'
+            },
+            {
+              role: 'user',
+              content: `Extract the top 10 most relevant SEO keywords from this content:\n\n${content.substring(0, 2000)}`
+            }
+          ],
         }),
-      }
-    );
+      });
 
-    const topicData = await topicResponse.json();
-    console.log('Topic analysis response:', topicData);
-    
-    if (!topicData.labels || !topicData.scores) {
-      console.error('Invalid topic analysis response:', topicData);
-      return [];
+      if (!openAIResponse.ok) {
+        throw new Error(`OpenAI API error: ${openAIResponse.status} ${openAIResponse.statusText}`);
+      }
+
+      const openAIData: OpenAIResponse = await openAIResponse.json();
+      logger.debug('OpenAI response:', openAIData);
+
+      if (!openAIData.choices?.[0]?.message?.content) {
+        throw new Error('Invalid OpenAI response format');
+      }
+
+      const openAIKeywords = JSON.parse(openAIData.choices[0].message.content);
+      logger.info('Successfully extracted keywords from OpenAI:', openAIKeywords);
+      return openAIKeywords;
+
+    } catch (openAIError) {
+      logger.error('OpenAI keyword extraction failed:', openAIError);
+      logger.info('Falling back to Hugging Face for topic classification...');
+      
+      // Fallback to Hugging Face
+      const topicResponse = await fetch(
+        "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${HF_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            inputs: content.substring(0, 1000),
+            parameters: {
+              candidate_labels: [
+                "technology", "business", "health", "education", 
+                "entertainment", "sports", "science", "politics", 
+                "lifestyle", "travel"
+              ],
+              multi_label: true
+            }
+          }),
+        }
+      );
+
+      if (!topicResponse.ok) {
+        throw new Error(`Hugging Face API error: ${topicResponse.status} ${topicResponse.statusText}`);
+      }
+
+      const topicData = await topicResponse.json();
+      logger.debug('Topic analysis response:', topicData);
+      
+      if (!topicData.labels || !topicData.scores) {
+        throw new Error('Invalid topic analysis response');
+      }
+
+      const relevantTopics = topicData.labels
+        .filter((_: string, index: number) => topicData.scores[index] > 0.3);
+      
+      logger.info('Successfully extracted topics from Hugging Face:', relevantTopics);
+      return relevantTopics;
     }
-
-    // Get relevant topics
-    const relevantTopics = topicData.labels
-      .filter((_: string, index: number) => topicData.scores[index] > 0.3);
-    
-    console.log('Relevant topics:', relevantTopics);
-
-    // Now extract key phrases
-    const keyPhraseResponse = await fetch(
-      "https://api-inference.huggingface.co/models/microsoft/keyword-extractor",
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${HF_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          inputs: content.substring(0, 2000),
-          parameters: {
-            max_length: 128,
-            num_return_sequences: 15
-          }
-        }),
-      }
-    );
-
-    const keyPhraseData = await keyPhraseResponse.json();
-    console.log('Key phrase analysis response:', keyPhraseData);
-
-    // Combine topics and key phrases
-    const keywords = [...new Set([
-      ...relevantTopics,
-      ...(Array.isArray(keyPhraseData) ? keyPhraseData : [])
-    ])];
-
-    console.log('Final extracted keywords:', keywords);
-    return keywords;
-
   } catch (error) {
-    console.error('Error in keyword analysis:', error);
+    logger.error('All keyword analysis methods failed:', error);
     return [];
   }
 };

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/components/ui/use-toast";
 
 export interface LinkSuggestion {
   suggestedAnchorText: string;
@@ -29,6 +30,11 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     if (analysisError) {
       console.error("Analysis error:", analysisError);
+      toast({
+        title: "Analysis Error",
+        description: analysisError.message,
+        variant: "destructive"
+      });
       throw new Error(analysisError.message);
     }
 
@@ -36,6 +42,11 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     if (!analysisData) {
       console.error("No analysis data received");
+      toast({
+        title: "Analysis Error",
+        description: "No analysis data received from server",
+        variant: "destructive"
+      });
       throw new Error("No analysis data received from server");
     }
 
@@ -59,6 +70,11 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Processed keywords:", keywords);
     console.log("Processed suggestions:", suggestions);
 
+    toast({
+      title: "Analysis Complete",
+      description: `Found ${keywords.exact_match.length} primary keywords and ${suggestions.length} link suggestions`,
+    });
+
     return {
       keywords,
       outboundSuggestions: suggestions
@@ -66,6 +82,11 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
   } catch (error) {
     console.error("Error in page analysis:", error);
+    toast({
+      title: "Analysis Failed",
+      description: error instanceof Error ? error.message : "Unknown error occurred",
+      variant: "destructive"
+    });
     throw error;
   }
 };
