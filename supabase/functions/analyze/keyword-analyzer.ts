@@ -1,15 +1,14 @@
 import { logger } from "./utils/logger.ts";
+import { Configuration, OpenAIApi } from "https://esm.sh/openai@3.3.0";
 
 const HF_API_KEY = Deno.env.get('HUGGING_FACE_API_KEY');
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
-interface OpenAIResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
-}
+// Initialize OpenAI configuration
+const configuration = new Configuration({
+  apiKey: OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
 
 export const analyzeKeywords = async (content: string): Promise<string[]> => {
   try {
@@ -24,42 +23,27 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
     // First try OpenAI for keyword extraction
     try {
       logger.info('Attempting OpenAI keyword extraction...');
-      const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an SEO expert. Extract the most important keywords and phrases from the given content. Return ONLY a JSON array of strings, with each string being 1-3 words long.'
-            },
-            {
-              role: 'user',
-              content: `Extract the top 15 most relevant SEO keywords and phrases from this content. Each keyword/phrase should be 1-3 words long:\n\n${content.substring(0, 2000)}`
-            }
-          ],
-        }),
+      
+      const completion = await openai.createChatCompletion({
+        model: "gpt-3.5-turbo", // Using a valid model name
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an SEO expert. Extract the most important keywords and phrases from the given content. Return ONLY a JSON array of strings, with each string being 1-3 words long.'
+          },
+          {
+            role: 'user',
+            content: `Extract the top 15 most relevant SEO keywords and phrases from this content. Each keyword/phrase should be 1-3 words long:\n\n${content.substring(0, 2000)}`
+          }
+        ],
       });
 
-      if (!openAIResponse.ok) {
-        const errorText = await openAIResponse.text();
-        logger.error(`OpenAI API error: ${openAIResponse.status} ${openAIResponse.statusText}`, errorText);
-        throw new Error(`OpenAI API error: ${openAIResponse.status} ${openAIResponse.statusText}`);
-      }
-
-      const openAIData: OpenAIResponse = await openAIResponse.json();
-      logger.debug('OpenAI response:', openAIData);
-
-      if (!openAIData.choices?.[0]?.message?.content) {
-        logger.error('Invalid OpenAI response format:', openAIData);
+      if (!completion.data.choices?.[0]?.message?.content) {
+        logger.error('Invalid OpenAI response format:', completion.data);
         throw new Error('Invalid OpenAI response format');
       }
 
-      const openAIKeywords = JSON.parse(openAIData.choices[0].message.content);
+      const openAIKeywords = JSON.parse(completion.data.choices[0].message.content);
       logger.info('Successfully extracted keywords from OpenAI:', openAIKeywords);
       return openAIKeywords;
 
