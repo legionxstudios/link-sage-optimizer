@@ -43,8 +43,8 @@ serve(async (req) => {
     const suggestions = await generateSEOSuggestions(content, keywords, url, []);
     console.log('Generated suggestions:', suggestions);
 
-    // Save analysis to database
-    console.log('Saving analysis to database...');
+    // Save analysis to database using upsert
+    console.log('Saving/updating analysis in database...');
     const { error: analysisError } = await supabase
       .from('page_analysis')
       .upsert({
@@ -59,6 +59,9 @@ serve(async (req) => {
         },
         suggestions,
         created_at: new Date().toISOString()
+      }, {
+        onConflict: 'url',
+        ignoreDuplicates: false
       });
 
     if (analysisError) {
