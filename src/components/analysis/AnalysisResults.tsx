@@ -39,6 +39,14 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
     fetchStoredAnalysis();
   }, []);
 
+  if (!keywords && !outboundSuggestions) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No analysis results available.
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -46,38 +54,64 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
       transition={{ duration: 0.4, delay: 0.2 }}
       className="space-y-6"
     >
-      <Card className="p-6">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Analysis Results</h3>
-          </div>
+      {keywords && (
+        <Card className="p-6">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Keywords Analysis</h3>
+            </div>
 
-          <div className="space-y-4">
-            <div>
-              <h4 className="text-sm font-medium mb-2">Keywords</h4>
-              <div className="flex flex-wrap gap-2">
-                {keywords?.exact_match?.map((keyword, index) => (
-                  <Badge key={index} variant="default">
-                    {keyword}
-                  </Badge>
-                ))}
-                {keywords?.broad_match?.map((keyword, index) => (
-                  <Badge key={index} variant="secondary">
-                    {keyword}
-                  </Badge>
-                ))}
-                {keywords?.related_match?.map((keyword, index) => (
-                  <Badge key={index} variant="outline">
-                    {keyword}
-                  </Badge>
-                ))}
-              </div>
+            <div className="space-y-4">
+              {keywords.exact_match?.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Exact Match Keywords</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {keywords.exact_match.map((keyword, index) => (
+                      <Badge key={index} variant="default">
+                        {keyword}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {keywords.broad_match?.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Broad Match Keywords</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {keywords.broad_match.map((keyword, index) => (
+                      <Badge key={index} variant="secondary">
+                        {keyword}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {keywords.related_match?.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Related Keywords</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {keywords.related_match.map((keyword, index) => (
+                      <Badge key={index} variant="outline">
+                        {keyword}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
+
       {outboundSuggestions && outboundSuggestions.length > 0 && (
-        <LinkSuggestions suggestions={outboundSuggestions} />
+        <Card className="p-6">
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Link Suggestions</h3>
+            <LinkSuggestions suggestions={outboundSuggestions} />
+          </div>
+        </Card>
       )}
     </motion.div>
   );

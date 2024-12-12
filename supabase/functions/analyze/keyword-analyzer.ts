@@ -30,11 +30,11 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
           messages: [
             {
               role: 'system',
-              content: 'You are an SEO expert. Extract the most important keywords from the given content. Return only a JSON array of strings.'
+              content: 'You are an SEO expert. Extract the most important keywords and phrases from the given content. Return ONLY a JSON array of strings, with each string being 1-3 words long.'
             },
             {
               role: 'user',
-              content: `Extract the top 10 most relevant SEO keywords from this content:\n\n${content.substring(0, 2000)}`
+              content: `Extract the top 15 most relevant SEO keywords and phrases from this content. Each keyword/phrase should be 1-3 words long:\n\n${content.substring(0, 2000)}`
             }
           ],
         }),
@@ -74,7 +74,8 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
               candidate_labels: [
                 "technology", "business", "health", "education", 
                 "entertainment", "sports", "science", "politics", 
-                "lifestyle", "travel"
+                "lifestyle", "travel", "marketing", "software",
+                "ecommerce", "finance", "social media"
               ],
               multi_label: true
             }

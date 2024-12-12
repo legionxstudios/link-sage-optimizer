@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { extractContent } from "./content-analyzer.ts";
+import { extractContent } from "./content-extractor.ts";
 import { analyzeKeywords } from "./keyword-analyzer.ts";
 import { generateSEOSuggestions } from "./modules/suggestion-generator.ts";
 import { logger } from "./utils/logger.ts";
@@ -80,7 +80,7 @@ serve(async (req) => {
           broad_match: keywords.slice(5, 10),
           related_match: keywords.slice(10, 15)
         },
-        suggestions
+        outboundSuggestions: suggestions
       }),
       { 
         headers: { 
