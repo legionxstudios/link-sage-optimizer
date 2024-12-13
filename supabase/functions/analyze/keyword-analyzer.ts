@@ -3,12 +3,14 @@ import { logger } from "./utils/logger.ts";
 const HF_API_KEY = Deno.env.get('HUGGING_FACE_API_KEY');
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
-export const analyzeKeywords = async (content: string): Promise<string[]> => {
+export const analyzeKeywords = async (content: string): Promise<{
+  exact_match: string[];
+  broad_match: string[];
+  related_match: string[];
+}> => {
   try {
     logger.info('Starting keyword analysis...');
     logger.debug('Content length:', content.length);
-    
-    // Log a sample of the content to verify what we're analyzing
     logger.debug('Content sample:', content.substring(0, 500));
     
     if (!OPENAI_API_KEY) {
@@ -16,7 +18,6 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
       throw new Error('OpenAI API key is not configured');
     }
     
-    // First try OpenAI for keyword extraction
     try {
       logger.info('Attempting OpenAI keyword extraction...');
       
@@ -31,21 +32,14 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
           messages: [
             {
               role: 'system',
-              content: `You are an SEO expert specialized in keyword extraction. 
-              Analyze the content and extract exactly 15 keywords/phrases, categorized as follows:
-              - 5 exact match keywords (highest relevance)
-              - 5 broad match keywords (medium relevance)
-              - 5 related keywords (lower relevance)
-              Each keyword/phrase should be 1-3 words long.
-              Return ONLY a JSON object with these three arrays.`
+              content: 'You are an SEO expert. Extract keywords from the content and categorize them into three arrays: exact_match (primary keywords), broad_match (related terms), and related_match (broader topics). Return ONLY a JSON object with these three arrays.'
             },
             {
               role: 'user',
-              content: `Extract and categorize keywords from this content. If the content is too short or empty, return empty arrays:\n\n${content.substring(0, 2000)}`
+              content: `Analyze this content and return a JSON object with three arrays of keywords (exact_match, broad_match, related_match). If the content is empty or invalid, return empty arrays:\n\n${content.substring(0, 2000)}`
             }
           ],
-          temperature: 0.3, // Lower temperature for more focused results
-          max_tokens: 500
+          temperature: 0.3
         }),
       });
 
@@ -63,9 +57,15 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
         throw new Error('Invalid OpenAI response format');
       }
 
-      const openAIKeywords = JSON.parse(data.choices[0].message.content);
-      logger.info('Successfully extracted keywords from OpenAI:', openAIKeywords);
-      return openAIKeywords;
+      const parsedKeywords = JSON.parse(data.choices[0].message.content);
+      logger.info('Successfully extracted keywords from OpenAI:', parsedKeywords);
+
+      // Ensure we have the correct structure
+      return {
+        exact_match: Array.isArray(parsedKeywords.exact_match) ? parsedKeywords.exact_match : [],
+        broad_match: Array.isArray(parsedKeywords.broad_match) ? parsedKeywords.broad_match : [],
+        related_match: Array.isArray(parsedKeywords.related_match) ? parsedKeywords.related_match : []
+      };
 
     } catch (openAIError) {
       logger.error('OpenAI keyword extraction failed:', openAIError);
@@ -76,7 +76,6 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
         throw new Error('Both OpenAI and Hugging Face API keys are not configured');
       }
       
-      // Fallback to Hugging Face
       const topicResponse = await fetch(
         "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
         {
@@ -118,6 +117,8 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
         .filter((_: string, index: number) => topicData.scores[index] > 0.3);
       
       logger.info('Successfully extracted topics from Hugging Face:', relevantTopics);
+      
+      // Split the topics into three categories based on confidence scores
       return {
         exact_match: relevantTopics.slice(0, 5),
         broad_match: relevantTopics.slice(5, 10),
@@ -126,6 +127,7 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
     }
   } catch (error) {
     logger.error('All keyword analysis methods failed:', error);
+    // Return empty arrays as fallback
     return {
       exact_match: [],
       broad_match: [],

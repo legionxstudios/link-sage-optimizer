@@ -42,7 +42,7 @@ serve(async (req) => {
 
     // Generate suggestions
     logger.info('Generating suggestions...');
-    const suggestions = await generateSEOSuggestions(content, keywords, url, []);
+    const suggestions = await generateSEOSuggestions(content, [...keywords.exact_match, ...keywords.broad_match], url, []);
     logger.info('Generated suggestions:', suggestions);
 
     // Save/update analysis in database
@@ -53,12 +53,8 @@ serve(async (req) => {
         url,
         title,
         content,
-        main_keywords: keywords,
-        seo_keywords: {
-          exact_match: keywords.slice(0, 5),
-          broad_match: keywords.slice(5, 10),
-          related_match: keywords.slice(10, 15)
-        },
+        main_keywords: keywords.exact_match,
+        seo_keywords: keywords,
         suggestions,
         created_at: new Date().toISOString()
       }, {
@@ -75,11 +71,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        keywords: {
-          exact_match: keywords.slice(0, 5),
-          broad_match: keywords.slice(5, 10),
-          related_match: keywords.slice(10, 15)
-        },
+        keywords,
         outboundSuggestions: suggestions
       }),
       { 
