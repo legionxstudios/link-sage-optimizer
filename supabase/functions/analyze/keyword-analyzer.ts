@@ -8,6 +8,9 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
     logger.info('Starting keyword analysis...');
     logger.debug('Content length:', content.length);
     
+    // Log a sample of the content to verify what we're analyzing
+    logger.debug('Content sample:', content.substring(0, 500));
+    
     if (!OPENAI_API_KEY) {
       logger.error('OpenAI API key is not configured');
       throw new Error('OpenAI API key is not configured');
@@ -28,13 +31,21 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
           messages: [
             {
               role: 'system',
-              content: 'You are an SEO expert. Extract the most important keywords and phrases from the given content. Return ONLY a JSON array of strings, with each string being 1-3 words long.'
+              content: `You are an SEO expert specialized in keyword extraction. 
+              Analyze the content and extract exactly 15 keywords/phrases, categorized as follows:
+              - 5 exact match keywords (highest relevance)
+              - 5 broad match keywords (medium relevance)
+              - 5 related keywords (lower relevance)
+              Each keyword/phrase should be 1-3 words long.
+              Return ONLY a JSON object with these three arrays.`
             },
             {
               role: 'user',
-              content: `Extract the top 15 most relevant SEO keywords and phrases from this content. Each keyword/phrase should be 1-3 words long:\n\n${content.substring(0, 2000)}`
+              content: `Extract and categorize keywords from this content. If the content is too short or empty, return empty arrays:\n\n${content.substring(0, 2000)}`
             }
           ],
+          temperature: 0.3, // Lower temperature for more focused results
+          max_tokens: 500
         }),
       });
 
@@ -107,10 +118,18 @@ export const analyzeKeywords = async (content: string): Promise<string[]> => {
         .filter((_: string, index: number) => topicData.scores[index] > 0.3);
       
       logger.info('Successfully extracted topics from Hugging Face:', relevantTopics);
-      return relevantTopics;
+      return {
+        exact_match: relevantTopics.slice(0, 5),
+        broad_match: relevantTopics.slice(5, 10),
+        related_match: relevantTopics.slice(10, 15)
+      };
     }
   } catch (error) {
     logger.error('All keyword analysis methods failed:', error);
-    return [];
+    return {
+      exact_match: [],
+      broad_match: [],
+      related_match: []
+    };
   }
 };

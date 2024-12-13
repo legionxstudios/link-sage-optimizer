@@ -1,4 +1,5 @@
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
+import { logger } from "./utils/logger.ts";
 
 interface Link {
   url: string;
@@ -9,26 +10,52 @@ interface Link {
 
 export async function extractContent(url: string) {
   console.log('Extracting content from:', url);
-  const response = await fetch(url);
-  const html = await response.text();
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-
-  if (!doc) {
-    throw new Error('Failed to parse webpage');
-  }
-
-  const title = doc.querySelector('title')?.textContent || '';
-  const mainContent = extractMainContent(doc);
-  console.log('Extracted content length:', mainContent.length);
   
-  const links = extractLinks(doc, url);
-  console.log('Extracted links count:', links.length);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LinkAnalyzerBot/1.0; +http://example.com/bot)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const html = await response.text();
+    logger.debug('Received HTML length:', html.length);
+    
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    if (!doc) {
+      throw new Error('Failed to parse webpage');
+    }
 
-  return {
-    title,
-    content: mainContent,
-    links
-  };
+    // Remove script tags and other non-content elements first
+    ['script', 'style', 'noscript', 'iframe', 'nav', 'footer', 'header'].forEach(tag => {
+      doc.querySelectorAll(tag).forEach(el => el.remove());
+    });
+
+    const title = doc.querySelector('title')?.textContent || '';
+    logger.info('Extracted title:', title);
+    
+    const mainContent = extractMainContent(doc);
+    logger.info('Extracted content length:', mainContent.length);
+    logger.debug('Content sample:', mainContent.substring(0, 200));
+    
+    const links = extractLinks(doc, url);
+    logger.info('Extracted links count:', links.length);
+
+    return {
+      title,
+      content: mainContent,
+      links
+    };
+  } catch (error) {
+    logger.error('Error extracting content:', error);
+    throw error;
+  }
 }
 
 function extractMainContent(doc: Document): string {
