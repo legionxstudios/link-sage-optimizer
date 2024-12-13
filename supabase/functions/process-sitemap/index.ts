@@ -53,45 +53,6 @@ serve(async (req) => {
 
     logger.info(`Found ${urls.length} URLs in sitemap`);
 
-    // Queue URLs for crawling
-    const { data: website, error: websiteError } = await supabase
-      .from('websites')
-      .upsert({
-        domain: new URL(url).hostname,
-        last_crawled_at: new Date().toISOString()
-      }, {
-        onConflict: 'domain'
-      })
-      .select()
-      .single();
-
-    if (websiteError) {
-      logger.error('Error saving website:', websiteError);
-      throw websiteError;
-    }
-
-    logger.info(`Website record saved/updated: ${website.id}`);
-
-    // Queue pages for crawling
-    const pages = urls.map(entry => ({
-      website_id: website.id,
-      url: entry.url,
-      last_crawled_at: null
-    }));
-
-    const { error: pagesError } = await supabase
-      .from('pages')
-      .upsert(pages, {
-        onConflict: 'url'
-      });
-
-    if (pagesError) {
-      logger.error('Error queueing pages:', pagesError);
-      throw pagesError;
-    }
-
-    logger.info(`Successfully queued ${pages.length} pages for crawling`);
-
     return new Response(
       JSON.stringify({ 
         success: true, 
