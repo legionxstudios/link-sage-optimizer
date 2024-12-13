@@ -17,29 +17,10 @@ async def analyze_content_with_openai(content: str) -> List[str]:
         logger.info("Starting content analysis with OpenAI")
         logger.info(f"Content length: {len(content)}")
         
-        function_definition = {
-            "name": "extract_key_phrases",
-            "description": "Extract ONLY 2-3 word key phrases that represent the main topics from the content. Each phrase must be exactly 2-3 words long.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "key_phrases": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "description": "A 2-3 word phrase representing a key topic"
-                        },
-                        "description": "List of 2-3 word key phrases extracted from the text."
-                    }
-                },
-                "required": ["key_phrases"]
-            }
-        }
-
         try:
             logger.info("Sending request to OpenAI")
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-4o-mini",  # Using the faster model
+            response = await openai.chat.completions.create(
+                model="gpt-4",
                 messages=[
                     {
                         "role": "system",
@@ -50,7 +31,24 @@ async def analyze_content_with_openai(content: str) -> List[str]:
                         "content": f"Extract 10 key phrases (EXACTLY 2-3 words each) that represent the main topics of the following content:\n\n{content[:2000]}\n\nEnsure each phrase is EXACTLY 2-3 words long."
                     }
                 ],
-                functions=[function_definition],
+                functions=[{
+                    "name": "extract_key_phrases",
+                    "description": "Extract ONLY 2-3 word key phrases that represent the main topics from the content. Each phrase must be exactly 2-3 words long.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "key_phrases": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "description": "A 2-3 word phrase representing a key topic"
+                                },
+                                "description": "List of 2-3 word key phrases extracted from the text."
+                            }
+                        },
+                        "required": ["key_phrases"]
+                    }
+                }],
                 function_call={"name": "extract_key_phrases"}
             )
             
