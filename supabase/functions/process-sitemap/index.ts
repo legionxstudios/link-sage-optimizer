@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase_supabase-js@2";
+import { parse } from "https://deno.land/x/xml@2.1.1/mod.ts";
 import { logger } from "./utils/logger.ts";
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,21 +59,19 @@ serve(async (req) => {
     const sitemapText = await response.text();
     logger.info(`Sitemap content length: ${sitemapText.length}`);
 
-    // Parse the XML
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(sitemapText, "text/xml");
-    
+    // Parse the XML using the new parser
+    const xmlDoc = parse(sitemapText);
     if (!xmlDoc) {
       throw new Error('Failed to parse sitemap XML');
     }
 
-    // Extract and store URLs
-    const urlElements = xmlDoc.getElementsByTagName('url');
+    // Extract URLs from the sitemap structure
+    const urls = xmlDoc.urlset?.url ?? [];
     const processedUrls = [];
     
-    for (const urlElement of urlElements) {
-      const loc = urlElement.getElementsByTagName('loc')[0]?.textContent;
-      const lastmod = urlElement.getElementsByTagName('lastmod')[0]?.textContent;
+    for (const urlElement of urls) {
+      const loc = urlElement.loc?.[0];
+      const lastmod = urlElement.lastmod?.[0];
       
       if (!loc) continue;
 
