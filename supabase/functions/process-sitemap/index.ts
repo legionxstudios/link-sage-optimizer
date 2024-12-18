@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase_supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parse } from "https://deno.land/x/xml@2.1.1/mod.ts";
 import { logger } from "./utils/logger.ts";
 
