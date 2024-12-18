@@ -7,12 +7,11 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface AnalysisResultsProps {
-  results: AnalysisResponse;
+  results?: AnalysisResponse;
 }
 
 export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
-  const { keywords, outboundSuggestions } = results;
-  console.log("Rendering AnalysisResults with:", { keywords, outboundSuggestions });
+  console.log("Rendering AnalysisResults with:", results);
 
   useEffect(() => {
     const fetchStoredAnalysis = async () => {
@@ -38,6 +37,16 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
     fetchStoredAnalysis();
   }, []);
+
+  if (!results) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Enter a URL above to start analysis.
+      </div>
+    );
+  }
+
+  const { keywords, outboundSuggestions } = results;
 
   if (!keywords && !outboundSuggestions) {
     return (
