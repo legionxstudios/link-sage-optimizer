@@ -59,21 +59,21 @@ serve(async (req) => {
     const sitemapText = await response.text();
     logger.info(`Sitemap content length: ${sitemapText.length}`);
 
-    // Parse the XML using the new parser
+    // Parse XML using Deno's XML parser
     const xmlDoc = parse(sitemapText);
-    if (!xmlDoc) {
-      throw new Error('Failed to parse sitemap XML');
-    }
-
-    // Extract URLs from the sitemap structure
     const urls = xmlDoc.urlset?.url ?? [];
     const processedUrls = [];
+
+    logger.info(`Found ${urls.length} URLs in sitemap`);
     
     for (const urlElement of urls) {
       const loc = urlElement.loc?.[0];
       const lastmod = urlElement.lastmod?.[0];
       
-      if (!loc) continue;
+      if (!loc) {
+        logger.warn('Skipping URL element without location');
+        continue;
+      }
 
       try {
         // Store page in database using upsert
