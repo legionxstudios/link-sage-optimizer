@@ -26,29 +26,16 @@ serve(async (req) => {
     const { title, content } = await fetchAndExtractContent(url);
     logger.info('Content extracted, length:', content.length);
 
-    // Analyze keywords
-    logger.info('Analyzing keywords...');
-    const keywords = await analyzeWithOpenAI(content);
-    logger.info('Keywords extracted:', keywords);
-
-    // Generate suggestions (simplified for now)
-    const suggestions = keywords.exact_match.map(keyword => ({
-      suggestedAnchorText: keyword,
-      context: content.substring(0, 200),
-      matchType: 'keyword_based',
-      relevanceScore: 0.8
-    }));
-    logger.info('Generated suggestions:', suggestions);
+    // Analyze with OpenAI
+    logger.info('Analyzing content...');
+    const analysis = await analyzeWithOpenAI(content);
+    logger.info('Analysis completed:', analysis);
 
     // Save results
-    await saveAnalysisResults(url, title, content, keywords, suggestions);
+    await saveAnalysisResults(url, title, content, analysis.keywords, analysis.outboundSuggestions);
 
-    logger.info('Analysis completed successfully');
     return new Response(
-      JSON.stringify({
-        keywords,
-        outboundSuggestions: suggestions
-      }),
+      JSON.stringify(analysis),
       { 
         headers: { 
           ...corsHeaders, 

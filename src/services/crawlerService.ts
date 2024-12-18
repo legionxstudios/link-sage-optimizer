@@ -6,7 +6,7 @@ export interface LinkSuggestion {
   context: string;
   matchType: string;
   relevanceScore: number;
-  targetUrl?: string;
+  targetUrl: string;
   targetTitle?: string;
 }
 
@@ -57,8 +57,8 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       related_match: [] 
     };
 
-    // Ensure we have valid suggestions
-    const suggestions = (analysisData.suggestions || []).map((suggestion: any) => ({
+    // Ensure we have valid suggestions with target URLs
+    const suggestions = (analysisData.outboundSuggestions || []).map((suggestion: any) => ({
       suggestedAnchorText: suggestion.suggestedAnchorText || "",
       context: suggestion.context || "",
       matchType: suggestion.matchType || "keyword_based",
