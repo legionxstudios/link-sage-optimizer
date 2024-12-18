@@ -30,19 +30,25 @@ serve(async (req) => {
     // Extract domain from URL
     const domain = new URL(url).hostname;
     
-    // Get or create website record
+    // Get or create website record using upsert
     const { data: website, error: websiteError } = await supabase
       .from('websites')
       .upsert({ 
         domain,
         last_crawled_at: new Date().toISOString()
+      }, {
+        onConflict: 'domain',
+        ignoreDuplicates: false
       })
       .select()
       .single();
 
     if (websiteError) {
+      logger.error('Error upserting website:', websiteError);
       throw websiteError;
     }
+
+    logger.info(`Website record created/updated for domain: ${domain}`);
 
     // Fetch the sitemap
     const response = await fetch(url);
@@ -72,19 +78,22 @@ serve(async (req) => {
       if (!loc) continue;
 
       try {
-        // Store page in database
+        // Store page in database using upsert
         const { data: page, error: pageError } = await supabase
           .from('pages')
           .upsert({
             website_id: website.id,
             url: loc,
             last_crawled_at: lastmod || new Date().toISOString()
+          }, {
+            onConflict: 'url',
+            ignoreDuplicates: false
           })
           .select()
           .single();
 
         if (pageError) {
-          logger.error(`Error storing page ${loc}:`, pageError);
+          logger.error(`Error upserting page ${loc}:`, pageError);
           continue;
         }
 
@@ -92,6 +101,8 @@ serve(async (req) => {
           url: loc,
           lastModified: lastmod
         });
+
+        logger.info(`Successfully processed URL: ${loc}`);
 
       } catch (error) {
         logger.error(`Error processing URL ${loc}:`, error);
