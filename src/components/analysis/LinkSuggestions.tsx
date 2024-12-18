@@ -36,6 +36,17 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
     }
   };
 
+  const formatUrl = (url: string) => {
+    if (!url) return '#';
+    try {
+      const urlObj = new URL(url);
+      return urlObj.pathname;
+    } catch (e) {
+      console.warn('Invalid URL:', url);
+      return '#';
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Table>
@@ -55,15 +66,19 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
                 <span className="font-medium">{suggestion.suggestedAnchorText}</span>
               </TableCell>
               <TableCell>
-                <a 
-                  href={suggestion.targetUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
-                >
-                  {new URL(suggestion.targetUrl || '#').pathname}
-                  <ExternalLink className="h-4 w-4" />
-                </a>
+                {suggestion.targetUrl ? (
+                  <a 
+                    href={suggestion.targetUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                  >
+                    {formatUrl(suggestion.targetUrl)}
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">No URL available</span>
+                )}
               </TableCell>
               <TableCell>
                 {getMatchTypeLabel(suggestion.matchType)}
