@@ -1,32 +1,52 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logger } from "./utils/logger.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+);
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    logger.info('Starting sitemap processing');
     const { url } = await req.json();
     
     if (!url) {
-      logger.error('No URL provided');
       throw new Error('URL is required');
     }
 
     logger.info(`Processing sitemap for URL: ${url}`);
+    
+    // Extract domain from URL
+    const domain = new URL(url).hostname;
+    
+    // Get or create website record
+    const { data: website, error: websiteError } = await supabase
+      .from('websites')
+      .upsert({ 
+        domain,
+        last_crawled_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (websiteError) {
+      throw websiteError;
+    }
 
     // Fetch the sitemap
     const response = await fetch(url);
     if (!response.ok) {
-      logger.error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
       throw new Error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
     }
 
@@ -38,33 +58,56 @@ serve(async (req) => {
     const xmlDoc = parser.parseFromString(sitemapText, "text/xml");
     
     if (!xmlDoc) {
-      logger.error('Failed to parse sitemap XML');
       throw new Error('Failed to parse sitemap XML');
     }
 
-    // Extract URLs
-    const urls = Array.from(xmlDoc.getElementsByTagName('url'))
-      .map(urlElement => {
-        const loc = urlElement.getElementsByTagName('loc')[0]?.textContent;
-        const lastmod = urlElement.getElementsByTagName('lastmod')[0]?.textContent;
-        return { url: loc, lastModified: lastmod };
-      })
-      .filter(entry => entry.url);
+    // Extract and store URLs
+    const urlElements = xmlDoc.getElementsByTagName('url');
+    const processedUrls = [];
+    
+    for (const urlElement of urlElements) {
+      const loc = urlElement.getElementsByTagName('loc')[0]?.textContent;
+      const lastmod = urlElement.getElementsByTagName('lastmod')[0]?.textContent;
+      
+      if (!loc) continue;
 
-    logger.info(`Found ${urls.length} URLs in sitemap`);
+      try {
+        // Store page in database
+        const { data: page, error: pageError } = await supabase
+          .from('pages')
+          .upsert({
+            website_id: website.id,
+            url: loc,
+            last_crawled_at: lastmod || new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (pageError) {
+          logger.error(`Error storing page ${loc}:`, pageError);
+          continue;
+        }
+
+        processedUrls.push({
+          url: loc,
+          lastModified: lastmod
+        });
+
+      } catch (error) {
+        logger.error(`Error processing URL ${loc}:`, error);
+        continue;
+      }
+    }
+
+    logger.info(`Successfully processed ${processedUrls.length} URLs`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Processed ${urls.length} URLs from sitemap`,
-        urls: urls 
+        message: `Processed ${processedUrls.length} URLs from sitemap`,
+        urls: processedUrls 
       }),
-      { 
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        } 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
