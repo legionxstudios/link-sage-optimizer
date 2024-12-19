@@ -5,8 +5,6 @@ import { extractExistingLinks } from "./link-extractor.ts";
 import { findExactPhraseContext } from "./context-finder.ts";
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 async function detectTheme(content: string): Promise<string[]> {
   try {
@@ -21,7 +19,7 @@ async function detectTheme(content: string): Promise<string[]> {
         messages: [
           {
             role: 'system',
-            content: 'You are a content analyzer. Detect the main themes of the content. Return ONLY an array of 3-5 theme keywords.'
+            content: 'You are a content analyzer. Detect the main themes of the content. Return ONLY a JSON array of 3-5 theme keywords.'
           },
           {
             role: 'user',
@@ -32,8 +30,26 @@ async function detectTheme(content: string): Promise<string[]> {
       }),
     });
 
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+    }
+
     const data = await response.json();
-    const themes = JSON.parse(data.choices[0].message.content);
+    let themes: string[];
+    
+    try {
+      // Handle both direct array responses and string responses that need parsing
+      const content = data.choices[0].message.content;
+      themes = typeof content === 'string' ? JSON.parse(content) : content;
+      
+      if (!Array.isArray(themes)) {
+        throw new Error('Themes must be an array');
+      }
+    } catch (e) {
+      logger.error('Error parsing themes:', e);
+      themes = [];
+    }
+
     logger.info('Detected themes:', themes);
     return themes;
   } catch (error) {
@@ -48,35 +64,42 @@ async function findRelatedPages(themes: string[], crawledPages: ExistingPage[]):
   for (const page of crawledPages) {
     if (!page.content) continue;
     
-    // Check if page content is related to our themes
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are analyzing content relevance. The main themes are: ${themes.join(', ')}. 
-                     Return ONLY a number between 0 and 1 indicating relevance.`
-          },
-          {
-            role: 'user',
-            content: page.content
-          }
-        ],
-        temperature: 0.1,
-      }),
-    });
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `You are analyzing content relevance. The main themes are: ${themes.join(', ')}. 
+                       Return ONLY a number between 0 and 1 indicating relevance.`
+            },
+            {
+              role: 'user',
+              content: page.content
+            }
+          ],
+          temperature: 0.1,
+        }),
+      });
 
-    const data = await response.json();
-    const relevanceScore = parseFloat(data.choices[0].message.content);
-    
-    if (relevanceScore > 0.7) {
-      relatedPages.push(page);
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const relevanceScore = parseFloat(data.choices[0].message.content);
+      
+      if (relevanceScore > 0.7) {
+        relatedPages.push(page);
+      }
+    } catch (error) {
+      logger.error(`Error analyzing page ${page.url}:`, error);
     }
   }
 
@@ -119,11 +142,11 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
             role: 'system',
             content: `You are an SEO expert. Extract ONLY 2-3 word phrases that exist EXACTLY in the content and could be used as anchor text for internal linking.
                      The content themes are: ${themes.join(', ')}.
+                     Return a JSON array of strings.
                      Rules:
                      1. ONLY return phrases that exist VERBATIM in the content
                      2. Each phrase must be 2-3 words
-                     3. Phrases should be relevant to the themes
-                     4. Return as JSON array`
+                     3. Phrases should be relevant to the themes`
           },
           {
             role: 'user',
@@ -134,8 +157,25 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       }),
     });
 
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+    }
+
     const data = await response.json();
-    const suggestedPhrases = JSON.parse(data.choices[0].message.content);
+    let suggestedPhrases: string[];
+    
+    try {
+      const content = data.choices[0].message.content;
+      suggestedPhrases = typeof content === 'string' ? JSON.parse(content) : content;
+      
+      if (!Array.isArray(suggestedPhrases)) {
+        throw new Error('Suggested phrases must be an array');
+      }
+    } catch (e) {
+      logger.error('Error parsing suggested phrases:', e);
+      suggestedPhrases = [];
+    }
+
     logger.info('Suggested anchor text phrases:', suggestedPhrases);
 
     // 5. Create suggestions by matching keywords with related pages

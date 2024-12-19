@@ -87,6 +87,7 @@ serve(async (req) => {
         url,
         title,
         content,
+        detected_themes: analysis.themes,
         main_keywords: analysis.keywords?.exact_match || [],
         seo_keywords: analysis.keywords || {},
         suggestions: analysis.outboundSuggestions || [],
