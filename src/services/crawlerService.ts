@@ -47,6 +47,10 @@ const retryWithBackoff = async <T>(
 };
 
 export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
+  if (!url) {
+    throw new Error("URL is required");
+  }
+
   console.log("Starting page analysis for:", url);
   
   try {
@@ -55,7 +59,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     
     const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
       supabase.functions.invoke('process-sitemap', {
-        body: { url },
+        body: JSON.stringify({ url }), // Explicitly stringify the body
         headers: {
           'Content-Type': 'application/json'
         }
@@ -86,7 +90,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Invoking analyze function with URL:", url);
     const { data: analysisData, error: analysisError } = await retryWithBackoff(() =>
       supabase.functions.invoke('analyze', {
-        body: { url },
+        body: JSON.stringify({ url }), // Explicitly stringify the body
         headers: {
           'Content-Type': 'application/json'
         }

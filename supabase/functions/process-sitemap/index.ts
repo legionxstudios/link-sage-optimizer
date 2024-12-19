@@ -15,10 +15,12 @@ serve(async (req) => {
       return createResponse({ error: 'Method not allowed' }, 405);
     }
 
+    // Get the request body
     const text = await req.text();
     console.log('Raw request body:', text);
     
     if (!text) {
+      console.error('Empty request body received');
       return createResponse(
         { error: 'Request body is empty' },
         400
@@ -39,6 +41,7 @@ serve(async (req) => {
 
     const { url } = requestBody;
     if (!url) {
+      console.error('No URL provided in request body');
       return createResponse(
         { error: 'URL is required' },
         400
@@ -48,6 +51,7 @@ serve(async (req) => {
     try {
       new URL(url);
     } catch (e) {
+      console.error('Invalid URL format:', url);
       return createResponse(
         { error: 'Invalid URL format', details: e.message },
         400
