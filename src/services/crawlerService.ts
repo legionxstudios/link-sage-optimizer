@@ -63,12 +63,13 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     // First process the sitemap
     console.log("Processing sitemap for URL:", url);
     
-    const requestBody = JSON.stringify({ url });
+    // Send the URL as a plain object - Supabase will handle serialization
+    const requestBody = { url };
     console.log("Sitemap request body:", requestBody);
     
     const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
       supabase.functions.invoke('process-sitemap', {
-        body: { url },
+        body: requestBody,
         headers: {
           'Content-Type': 'application/json'
         }
