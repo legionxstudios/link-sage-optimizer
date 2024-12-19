@@ -33,20 +33,29 @@ export async function detectTheme(content: string): Promise<string[]> {
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content.trim();
+    if (!data.choices?.[0]?.message?.content) {
+      logger.error('Invalid OpenAI response structure:', data);
+      return [];
+    }
+
+    const responseContent = data.choices[0].message.content.trim();
+    logger.info('Raw OpenAI response:', responseContent);
     
-    // Remove any markdown formatting or extra text
-    const cleanContent = content.replace(/```json\n|\n```|```/g, '').trim();
+    // Clean the response content by removing any markdown formatting
+    const cleanContent = responseContent.replace(/```json\n|\n```|```/g, '').trim();
+    logger.info('Cleaned content:', cleanContent);
     
     let themes: string[];
     try {
       themes = JSON.parse(cleanContent);
       if (!Array.isArray(themes)) {
-        throw new Error('Themes must be an array');
+        logger.error('OpenAI response is not an array:', cleanContent);
+        return [];
       }
     } catch (e) {
       logger.error('Error parsing themes:', e);
-      themes = [];
+      logger.error('Raw content:', cleanContent);
+      return [];
     }
 
     logger.info('Detected themes:', themes);
