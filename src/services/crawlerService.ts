@@ -65,14 +65,19 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       throw sitemapError;
     }
 
+    // Log the raw sitemap response for debugging
+    console.log("Raw sitemap response:", sitemapData);
+
     if (!sitemapData?.success) {
       console.error("Sitemap processing failed:", sitemapData);
-      toast.error(sitemapData?.error || "Failed to process sitemap");
-      throw new Error(sitemapData?.error || "Failed to process sitemap");
+      const errorMessage = sitemapData?.error || "Failed to process sitemap";
+      toast.error(errorMessage);
+      throw new Error(errorMessage);
     }
 
     console.log("Sitemap processing result:", sitemapData);
-    toast.success(`Found ${sitemapData?.urls?.length || 0} pages in sitemap`);
+    const urlsFound = sitemapData?.urls?.length || 0;
+    toast.success(`Found ${urlsFound} pages in sitemap`);
 
     // Then analyze the page
     console.log("Invoking analyze function with URL:", url);

@@ -3,14 +3,15 @@ export interface SitemapUrl {
   lastModified: string | null;
 }
 
-export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> => {
+export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> {
+  console.log('Starting sitemap processing for URL:', url);
+  
   // Try to determine the sitemap URL
   const possibleSitemapUrls = [
+    url,
     new URL('/sitemap.xml', url).toString(),
-    new URL('sitemap.xml', url).toString(),
-    new URL('sitemap_index.xml', url).toString(),
-    new URL('wp-sitemap.xml', url).toString(),
-    // Add robots.txt check
+    new URL('/sitemap_index.xml', url).toString(),
+    new URL('/wp-sitemap.xml', url).toString(),
     new URL('/robots.txt', url).toString()
   ];
 
@@ -32,13 +33,9 @@ export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> =
         continue;
       }
 
-      const contentType = response.headers.get('content-type')?.toLowerCase() || '';
-      console.log(`Content-Type for ${sitemapUrl}:`, contentType);
-
       const text = await response.text();
-      console.log(`Received content length for ${sitemapUrl}:`, text.length);
-      console.log('First 200 chars:', text.substring(0, 200));
-
+      console.log(`Received content from ${sitemapUrl}, length: ${text.length}`);
+      
       // If this is robots.txt, try to extract sitemap URL
       if (sitemapUrl.endsWith('robots.txt')) {
         const sitemapMatch = text.match(/Sitemap:\s*(.+)/i);
@@ -48,7 +45,8 @@ export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> =
           try {
             const sitemapResponse = await fetch(robotsSitemapUrl);
             if (sitemapResponse.ok) {
-              return parseSitemapXml(await sitemapResponse.text(), robotsSitemapUrl);
+              const sitemapText = await sitemapResponse.text();
+              return extractUrlsFromXml(sitemapText, robotsSitemapUrl);
             }
           } catch (error) {
             console.error('Error fetching sitemap from robots.txt URL:', error);
@@ -57,49 +55,40 @@ export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> =
         continue;
       }
 
-      // Try to parse as XML
-      const urls = await parseSitemapXml(text, sitemapUrl);
+      const urls = extractUrlsFromXml(text, sitemapUrl);
       if (urls.length > 0) {
         console.log(`Successfully found ${urls.length} URLs in ${sitemapUrl}`);
         return urls;
       }
+      
     } catch (error) {
       console.error(`Error processing ${sitemapUrl}:`, error);
     }
   }
 
   throw new Error('No valid sitemap found at any common location');
-};
+}
 
-const parseSitemapXml = async (xmlText: string, sitemapUrl: string): Promise<SitemapUrl[]> => {
+function extractUrlsFromXml(xml: string, sourceUrl: string): SitemapUrl[] {
+  console.log(`Extracting URLs from XML content from ${sourceUrl}`);
   const urls: SitemapUrl[] = [];
   
-  // Handle both sitemap index and regular sitemap formats
-  const patterns = {
-    sitemapIndex: /<sitemap>([\s\S]*?)<\/sitemap>/g,
-    urlEntry: /<url>([\s\S]*?)<\/url>/g,
-    loc: /<loc>(.*?)<\/loc>/,
-    lastmod: /<lastmod>(.*?)<\/lastmod>/
-  };
-
   // First check if this is a sitemap index
-  const isSitemapIndex = xmlText.includes('<sitemapindex');
-  console.log(`${sitemapUrl} is sitemap index?`, isSitemapIndex);
-
-  if (isSitemapIndex) {
-    console.log('Processing sitemap index');
-    const sitemapMatches = xmlText.match(patterns.sitemapIndex) || [];
+  if (xml.includes('<sitemapindex')) {
+    console.log('Detected sitemap index format');
+    // Extract URLs from sitemap index
+    const sitemapMatches = xml.match(/<sitemap>[\s\S]*?<\/sitemap>/g) || [];
     
     for (const sitemapEntry of sitemapMatches) {
-      const locMatch = sitemapEntry.match(patterns.loc);
+      const locMatch = sitemapEntry.match(/<loc>(.*?)<\/loc>/);
       if (locMatch && locMatch[1]) {
         const childUrl = locMatch[1].trim();
         console.log('Found child sitemap:', childUrl);
-        
         try {
-          const response = await fetch(childUrl);
-          if (response.ok) {
-            const childUrls = await parseSitemapXml(await response.text(), childUrl);
+          const response = fetch(childUrl);
+          if (response) {
+            const childXml = response.text();
+            const childUrls = extractUrlsFromXml(childXml, childUrl);
             urls.push(...childUrls);
           }
         } catch (error) {
@@ -109,12 +98,12 @@ const parseSitemapXml = async (xmlText: string, sitemapUrl: string): Promise<Sit
     }
   } else {
     // Parse regular sitemap
-    console.log('Processing regular sitemap');
-    const urlMatches = xmlText.match(patterns.urlEntry) || [];
+    console.log('Processing regular sitemap format');
+    const urlMatches = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
     
     for (const urlEntry of urlMatches) {
-      const locMatch = urlEntry.match(patterns.loc);
-      const lastmodMatch = urlEntry.match(patterns.lastmod);
+      const locMatch = urlEntry.match(/<loc>(.*?)<\/loc>/);
+      const lastmodMatch = urlEntry.match(/<lastmod>(.*?)<\/lastmod>/);
       
       if (locMatch && locMatch[1]) {
         urls.push({
@@ -125,12 +114,12 @@ const parseSitemapXml = async (xmlText: string, sitemapUrl: string): Promise<Sit
     }
   }
 
-  console.log(`Found ${urls.length} URLs in ${sitemapUrl}`);
+  console.log(`Found ${urls.length} URLs in XML content`);
   if (urls.length === 0) {
-    console.log('Sample of content that yielded no URLs:', xmlText.substring(0, 500));
+    console.log('Sample of content that yielded no URLs:', xml.substring(0, 500));
   } else {
     console.log('Sample URLs found:', urls.slice(0, 3));
   }
 
   return urls;
-};
+}
