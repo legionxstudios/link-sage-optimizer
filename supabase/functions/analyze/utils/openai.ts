@@ -8,33 +8,8 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-export async function analyzeWithOpenAI(content: string, existingPages: ExistingPage[]): Promise<AnalysisResult> {
+async function detectTheme(content: string): Promise<string[]> {
   try {
-    if (!OPENAI_API_KEY) {
-      logger.error('OpenAI API key is not configured');
-      throw new Error('OpenAI API key is not configured');
-    }
-
-    logger.info('Starting OpenAI analysis...');
-    
-    const existingLinks = extractExistingLinks(content);
-    logger.info(`Found ${existingLinks.length} existing links in content`);
-    
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    const { data: crawledPages, error: pagesError } = await supabase
-      .from('pages')
-      .select('url, title, content');
-      
-    if (pagesError) {
-      logger.error('Error fetching crawled pages:', pagesError);
-      throw new Error('Failed to fetch crawled pages');
-    }
-
-    logger.info(`Found ${crawledPages?.length || 0} crawled pages in database`);
-
-    const truncatedContent = content.substring(0, 3000);
-    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -46,92 +21,164 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
         messages: [
           {
             role: 'system',
-            content: `You are an SEO expert. Extract ONLY phrases that exist EXACTLY in the content.
-            Rules:
-            1. ONLY return phrases that exist VERBATIM in the content with word boundaries
-            2. Each phrase must be 2-3 words long
-            3. Do not modify or paraphrase any phrases
-            4. Verify each phrase appears exactly as written
-            5. Do not include single words or phrases longer than 3 words`
+            content: 'You are a content analyzer. Detect the main themes of the content. Return ONLY an array of 3-5 theme keywords.'
           },
           {
             role: 'user',
-            content: `Extract ONLY 2-3 word phrases that appear EXACTLY in this content:\n\n${truncatedContent}`
+            content: content
           }
         ],
         temperature: 0.3,
-        max_tokens: 2000
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(`OpenAI API error: ${response.status} ${response.statusText}`, errorText);
-      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
-    }
+    const data = await response.json();
+    const themes = JSON.parse(data.choices[0].message.content);
+    logger.info('Detected themes:', themes);
+    return themes;
+  } catch (error) {
+    logger.error('Error detecting themes:', error);
+    return [];
+  }
+}
+
+async function findRelatedPages(themes: string[], crawledPages: ExistingPage[]): Promise<ExistingPage[]> {
+  const relatedPages = [];
+  
+  for (const page of crawledPages) {
+    if (!page.content) continue;
+    
+    // Check if page content is related to our themes
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are analyzing content relevance. The main themes are: ${themes.join(', ')}. 
+                     Return ONLY a number between 0 and 1 indicating relevance.`
+          },
+          {
+            role: 'user',
+            content: page.content
+          }
+        ],
+        temperature: 0.1,
+      }),
+    });
 
     const data = await response.json();
-    logger.debug('OpenAI raw response:', data);
+    const relevanceScore = parseFloat(data.choices[0].message.content);
+    
+    if (relevanceScore > 0.7) {
+      relatedPages.push(page);
+    }
+  }
 
-    if (!data.choices?.[0]?.message?.content) {
-      logger.error('Invalid OpenAI response format:', data);
-      throw new Error('Invalid OpenAI response format');
+  logger.info(`Found ${relatedPages.length} related pages`);
+  return relatedPages;
+}
+
+export async function analyzeWithOpenAI(content: string, existingPages: ExistingPage[]): Promise<AnalysisResult> {
+  try {
+    if (!OPENAI_API_KEY) {
+      logger.error('OpenAI API key is not configured');
+      throw new Error('OpenAI API key is not configured');
     }
 
-    const suggestedPhrases = data.choices[0].message.content
-      .split('\n')
-      .map(line => line.trim())
-      .filter(phrase => phrase.length > 0);
+    logger.info('Starting OpenAI analysis...');
+    
+    // 1. First detect the themes of the input content
+    const themes = await detectTheme(content);
+    logger.info('Content themes:', themes);
+    
+    // 2. Find related pages based on themes
+    const relatedPages = await findRelatedPages(themes, existingPages);
+    logger.info(`Found ${relatedPages.length} related pages`);
+    
+    // 3. Extract existing links to avoid duplicates
+    const existingLinks = extractExistingLinks(content);
+    logger.info(`Found ${existingLinks.length} existing links in content`);
+    
+    // 4. Find keywords in content that could link to related pages
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an SEO expert. Extract ONLY 2-3 word phrases that exist EXACTLY in the content and could be used as anchor text for internal linking.
+                     The content themes are: ${themes.join(', ')}.
+                     Rules:
+                     1. ONLY return phrases that exist VERBATIM in the content
+                     2. Each phrase must be 2-3 words
+                     3. Phrases should be relevant to the themes
+                     4. Return as JSON array`
+          },
+          {
+            role: 'user',
+            content: content
+          }
+        ],
+        temperature: 0.3,
+      }),
+    });
 
-    logger.info('Suggested phrases:', suggestedPhrases);
+    const data = await response.json();
+    const suggestedPhrases = JSON.parse(data.choices[0].message.content);
+    logger.info('Suggested anchor text phrases:', suggestedPhrases);
 
-    const verifiedSuggestions = [];
-    const keywords = {
+    // 5. Create suggestions by matching keywords with related pages
+    const suggestions = [];
+    const verifiedKeywords = {
       exact_match: [],
       broad_match: [],
       related_match: []
     };
 
     for (const phrase of suggestedPhrases) {
+      // Verify phrase exists in content
       const context = findExactPhraseContext(content, phrase);
       if (!context) {
         logger.info(`Skipping phrase "${phrase}" - no exact match found`);
         continue;
       }
 
-      if (context.includes(`[${phrase}]`)) {
-        keywords.exact_match.push(`${phrase} - ${context}`);
-      }
+      // Add to verified keywords
+      verifiedKeywords.exact_match.push(`${phrase} - ${context}`);
 
-      const relevantPages = crawledPages?.filter(page => 
-        page.content?.toLowerCase().includes(phrase.toLowerCase()) ||
-        page.title?.toLowerCase().includes(phrase.toLowerCase())
-      ) || [];
-
-      for (const page of relevantPages) {
+      // Match with related pages
+      for (const page of relatedPages) {
         if (!page.url || existingLinks.some(link => link.url === page.url)) {
           continue;
         }
 
-        const pageContext = findExactPhraseContext(page.content || '', phrase);
-        if (!pageContext) continue;
-
-        verifiedSuggestions.push({
+        suggestions.push({
           suggestedAnchorText: phrase,
           targetUrl: page.url,
           targetTitle: page.title || '',
           context,
-          matchType: "keyword_based",
-          relevanceScore: 0.8
+          matchType: "theme_based",
+          relevanceScore: 0.9
         });
       }
     }
 
-    logger.info('Generated suggestions:', verifiedSuggestions);
-
+    logger.info('Generated suggestions:', suggestions);
     return {
-      keywords,
-      outboundSuggestions: verifiedSuggestions
+      keywords: verifiedKeywords,
+      outboundSuggestions: suggestions,
+      themes
     };
 
   } catch (error) {

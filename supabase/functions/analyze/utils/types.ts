@@ -1,12 +1,12 @@
+export interface ExistingLink {
+  url: string;
+  anchorText: string;
+}
+
 export interface ExistingPage {
   url: string;
   title?: string;
   content?: string;
-}
-
-export interface ExistingLink {
-  url: string;
-  anchorText: string;
 }
 
 export interface AnalysisResult {
@@ -23,4 +23,5 @@ export interface AnalysisResult {
     matchType: string;
     relevanceScore: number;
   }>;
+  themes?: string[];
 }
