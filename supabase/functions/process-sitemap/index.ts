@@ -40,12 +40,11 @@ serve(async (req) => {
     logger.info(`Sitemap content length: ${sitemapText.length}`);
 
     // Simple XML parsing using regex
-    // This is more reliable than using DOMParser for XML in Deno
     const urlRegex = /<loc>(.*?)<\/loc>/g;
     const urls = Array.from(sitemapText.matchAll(urlRegex))
       .map(match => ({
         url: match[1],
-        lastModified: null // We could extract lastmod tags similarly if needed
+        lastModified: null
       }))
       .filter(entry => entry.url);
 
@@ -61,59 +60,74 @@ serve(async (req) => {
     const domain = new URL(url).hostname;
     logger.info('Processing domain:', domain);
 
-    // Create website record
-    const { data: website, error: websiteError } = await supabase
-      .from('websites')
-      .upsert({
-        domain,
-        last_crawled_at: new Date().toISOString()
-      })
-      .select()
-      .single();
+    try {
+      // Use upsert instead of insert for the website
+      const { data: website, error: websiteError } = await supabase
+        .from('websites')
+        .upsert(
+          {
+            domain,
+            last_crawled_at: new Date().toISOString()
+          },
+          {
+            onConflict: 'domain',
+            ignoreDuplicates: false // This will update existing records
+          }
+        )
+        .select()
+        .single();
 
-    if (websiteError) {
-      logger.error('Error creating website record:', websiteError);
-      throw websiteError;
-    }
+      if (websiteError) {
+        logger.error('Error upserting website record:', websiteError);
+        throw websiteError;
+      }
 
-    logger.info('Website record created/updated:', website);
+      logger.info('Website record created/updated:', website);
 
-    // Insert pages
-    const processedUrls = [];
-    for (const pageUrl of urls) {
-      try {
-        const { error: pageError } = await supabase
-          .from('pages')
-          .upsert({
-            website_id: website.id,
-            url: pageUrl.url,
-            last_crawled_at: null // Set to null so crawler will pick it up
-          });
+      // Insert pages
+      const processedUrls = [];
+      for (const pageUrl of urls) {
+        try {
+          const { error: pageError } = await supabase
+            .from('pages')
+            .upsert({
+              website_id: website.id,
+              url: pageUrl.url,
+              last_crawled_at: null // Set to null so crawler will pick it up
+            }, {
+              onConflict: 'url',
+              ignoreDuplicates: false // This will update existing records
+            });
 
-        if (pageError) {
-          logger.error(`Error inserting page ${pageUrl.url}:`, pageError);
-        } else {
-          logger.info(`Successfully queued page for crawling: ${pageUrl.url}`);
-          processedUrls.push(pageUrl.url);
+          if (pageError) {
+            logger.error(`Error upserting page ${pageUrl.url}:`, pageError);
+          } else {
+            logger.info(`Successfully queued page for crawling: ${pageUrl.url}`);
+            processedUrls.push(pageUrl.url);
+          }
+        } catch (error) {
+          logger.error(`Error processing URL ${pageUrl.url}:`, error);
         }
-      } catch (error) {
-        logger.error(`Error processing URL ${pageUrl.url}:`, error);
       }
-    }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Processed ${processedUrls.length} URLs from sitemap`,
-        urls: processedUrls 
-      }),
-      { 
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        } 
-      }
-    );
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: `Processed ${processedUrls.length} URLs from sitemap`,
+          urls: processedUrls 
+        }),
+        { 
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          } 
+        }
+      );
+
+    } catch (dbError) {
+      logger.error('Database operation error:', dbError);
+      throw dbError;
+    }
 
   } catch (error) {
     logger.error('Error processing sitemap:', error);
