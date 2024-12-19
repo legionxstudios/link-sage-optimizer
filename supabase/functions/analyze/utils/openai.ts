@@ -1,6 +1,9 @@
 import { logger } from "./logger.ts";
+import { createClient } from '@supabase/supabase-js';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 interface ExistingPage {
   url: string;
@@ -29,6 +32,36 @@ function extractExistingLinks(content: string): ExistingLink[] {
   return links;
 }
 
+function findExactPhraseContext(content: string, phrase: string): string {
+  try {
+    // Create pattern with word boundaries
+    const pattern = new RegExp(`\\b${phrase}\\b`, 'i');
+    const match = pattern.exec(content);
+    
+    if (!match) {
+      logger.info(`No exact match found for phrase: ${phrase}`);
+      return '';
+    }
+
+    // Get the exact phrase as it appears in content to preserve case
+    const exactPhrase = content.slice(match.index, match.index + phrase.length);
+    
+    // Get surrounding context
+    const contextStart = Math.max(0, match.index - 100);
+    const contextEnd = Math.min(content.length, match.index + phrase.length + 100);
+    let context = content.slice(contextStart, contextEnd).trim();
+    
+    // Highlight the exact phrase
+    context = context.replace(exactPhrase, `[${exactPhrase}]`);
+    
+    logger.info(`Found exact match for "${phrase}": ${context}`);
+    return context;
+  } catch (error) {
+    logger.error(`Error finding context for phrase: ${phrase}`, error);
+    return '';
+  }
+}
+
 export async function analyzeWithOpenAI(content: string, existingPages: ExistingPage[]) {
   try {
     if (!OPENAI_API_KEY) {
@@ -42,21 +75,24 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     const existingLinks = extractExistingLinks(content);
     logger.info(`Found ${existingLinks.length} existing links in content`);
     
+    // Initialize Supabase client
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Get all crawled pages from database
+    const { data: crawledPages, error: pagesError } = await supabase
+      .from('pages')
+      .select('url, title, content');
+      
+    if (pagesError) {
+      logger.error('Error fetching crawled pages:', pagesError);
+      throw new Error('Failed to fetch crawled pages');
+    }
+
+    logger.info(`Found ${crawledPages?.length || 0} crawled pages in database`);
+
     // Truncate content to avoid token limits
     const truncatedContent = content.substring(0, 3000);
     
-    // Create context about existing pages for OpenAI
-    const pagesContext = existingPages
-      .filter(page => !existingLinks.some(link => link.url === page.url))
-      .map(page => ({
-        url: page.url,
-        title: page.title || '',
-        summary: page.content?.substring(0, 200) || ''
-      }));
-
-    logger.info('Sending request to OpenAI API with content length:', truncatedContent.length);
-    logger.info('Available pages for linking:', pagesContext.length);
-
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -68,33 +104,17 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
         messages: [
           {
             role: 'system',
-            content: `You are an SEO expert. Your task is to analyze content and suggest internal linking opportunities.
-            You must respond with a valid JSON object using this exact structure, with no additional text or explanation.
-            IMPORTANT: Only suggest links that don't already exist in the content.
-            {
-              "keywords": {
-                "exact_match": ["keyword1", "keyword2"],
-                "broad_match": ["keyword3", "keyword4"],
-                "related_match": ["keyword5", "keyword6"]
-              },
-              "outboundSuggestions": [
-                {
-                  "suggestedAnchorText": "text",
-                  "targetUrl": "url",
-                  "context": "text around the suggested link",
-                  "relevanceScore": 0.8
-                }
-              ]
-            }`
+            content: `You are an SEO expert. Extract ONLY phrases that exist EXACTLY in the content.
+            Rules:
+            1. ONLY return phrases that exist VERBATIM in the content with word boundaries
+            2. Each phrase must be 2-3 words long
+            3. Do not modify or paraphrase any phrases
+            4. Verify each phrase appears exactly as written
+            5. Do not include single words or phrases longer than 3 words`
           },
           {
             role: 'user',
-            content: `Analyze this content and suggest relevant internal links. Return ONLY a JSON object matching the specified structure.
-            The content already has these links (DO NOT suggest these): ${JSON.stringify(existingLinks)}
-            
-            Content: ${truncatedContent}
-            
-            Available pages for linking: ${JSON.stringify(pagesContext)}`
+            content: `Extract ONLY 2-3 word phrases that appear EXACTLY in this content:\n\n${truncatedContent}`
           }
         ],
         temperature: 0.3,
@@ -116,50 +136,67 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       throw new Error('Invalid OpenAI response format');
     }
 
-    try {
-      const content = data.choices[0].message.content.trim();
-      logger.debug('Attempting to parse content:', content);
-      
-      const parsedResponse = JSON.parse(content);
-      
-      // Validate response structure
-      if (!parsedResponse.keywords || !parsedResponse.outboundSuggestions) {
-        logger.error('Invalid response structure:', parsedResponse);
-        throw new Error('Response missing required fields');
+    // Parse suggested phrases
+    const suggestedPhrases = data.choices[0].message.content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(phrase => phrase.length > 0);
+
+    logger.info('Suggested phrases:', suggestedPhrases);
+
+    // Verify and process each phrase
+    const verifiedSuggestions = [];
+    const keywords = {
+      exact_match: [],
+      broad_match: [],
+      related_match: []
+    };
+
+    for (const phrase of suggestedPhrases) {
+      // Find exact context for the phrase
+      const context = findExactPhraseContext(content, phrase);
+      if (!context) {
+        logger.info(`Skipping phrase "${phrase}" - no exact match found`);
+        continue;
       }
 
-      // Filter out any suggestions that might still reference existing links
-      const filteredSuggestions = parsedResponse.outboundSuggestions.filter(suggestion => 
-        !existingLinks.some(link => 
-          link.url === suggestion.targetUrl || 
-          link.anchorText.toLowerCase() === suggestion.suggestedAnchorText.toLowerCase()
-        )
-      );
+      // Add to keywords based on context confidence
+      if (context.includes(`[${phrase}]`)) {
+        keywords.exact_match.push(`${phrase} - ${context}`);
+      }
 
-      // Ensure arrays exist and are valid
-      const validResponse = {
-        keywords: {
-          exact_match: Array.isArray(parsedResponse.keywords.exact_match) ? parsedResponse.keywords.exact_match : [],
-          broad_match: Array.isArray(parsedResponse.keywords.broad_match) ? parsedResponse.keywords.broad_match : [],
-          related_match: Array.isArray(parsedResponse.keywords.related_match) ? parsedResponse.keywords.related_match : []
-        },
-        outboundSuggestions: filteredSuggestions.map(suggestion => ({
-          suggestedAnchorText: String(suggestion.suggestedAnchorText || ''),
-          targetUrl: String(suggestion.targetUrl || ''),
-          context: String(suggestion.context || ''),
-          relevanceScore: Number(suggestion.relevanceScore) || 0
-        }))
-      };
+      // Find relevant pages for this phrase
+      const relevantPages = crawledPages?.filter(page => 
+        page.content?.toLowerCase().includes(phrase.toLowerCase()) ||
+        page.title?.toLowerCase().includes(phrase.toLowerCase())
+      ) || [];
 
-      logger.info('Successfully parsed and validated OpenAI response');
-      logger.info(`Filtered out ${parsedResponse.outboundSuggestions.length - filteredSuggestions.length} duplicate suggestions`);
-      return validResponse;
+      // Create suggestions for relevant pages
+      for (const page of relevantPages) {
+        if (!page.url || existingLinks.some(link => link.url === page.url)) {
+          continue;
+        }
 
-    } catch (parseError) {
-      logger.error('Error parsing OpenAI response:', parseError);
-      logger.error('Raw response content:', data.choices[0].message.content);
-      throw new Error('Failed to parse OpenAI response as JSON');
+        const pageContext = findExactPhraseContext(page.content || '', phrase);
+        if (!pageContext) continue;
+
+        verifiedSuggestions.push({
+          suggestedAnchorText: phrase,
+          targetUrl: page.url,
+          targetTitle: page.title || '',
+          context,
+          matchType: "keyword_based",
+          relevanceScore: 0.8
+        });
+      }
     }
+
+    logger.info('Generated suggestions:', verifiedSuggestions);
+
+    return {
+      keywords,
+      outboundSuggestions: verifiedSuggestions
+    };
 
   } catch (error) {
     logger.error('OpenAI analysis failed:', error);
