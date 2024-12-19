@@ -1,4 +1,4 @@
-import { isValidWebpageUrl } from './url-validator';
+import { isValidWebpageUrl } from './url-validator.ts';
 
 export interface SitemapUrl {
   url: string;
