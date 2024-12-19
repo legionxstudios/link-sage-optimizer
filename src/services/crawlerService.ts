@@ -63,12 +63,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     // First process the sitemap
     console.log("Processing sitemap for URL:", url);
     
-    const requestBody = { url };
+    const requestBody = JSON.stringify({ url });
     console.log("Sitemap request body:", requestBody);
     
     const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
       supabase.functions.invoke('process-sitemap', {
-        body: requestBody,
+        body: { url },
         headers: {
           'Content-Type': 'application/json'
         }
@@ -101,7 +101,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       supabase.functions.invoke('analyze', {
         body: { 
           url,
-          crawlCompleted: true // Signal that crawling is done
+          crawlCompleted: true
         },
         headers: {
           'Content-Type': 'application/json'
