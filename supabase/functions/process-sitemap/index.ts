@@ -41,9 +41,10 @@ serve(async (req) => {
     }
 
     try {
-      // Fetch and parse sitemap
+      // Fetch and parse sitemap with enhanced error handling
+      console.log('Starting sitemap fetch and parse for:', url);
       const urls = await fetchAndParseSitemap(url);
-      console.log(`Found ${urls.length} URLs in sitemap`);
+      console.log(`Successfully found ${urls.length} URLs in sitemap`);
 
       if (urls.length === 0) {
         return createErrorResponse('No URLs found in sitemap');
@@ -51,6 +52,7 @@ serve(async (req) => {
 
       // Process URLs in database
       const domain = new URL(url).hostname;
+      console.log('Processing URLs for domain:', domain);
       const processedUrls = await processUrlsInDatabase(domain, urls);
 
       return createSuccessResponse({ 
