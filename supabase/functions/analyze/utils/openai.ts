@@ -24,14 +24,15 @@ export async function analyzeWithOpenAI(content: string) {
         messages: [
           {
             role: 'system',
-            content: 'You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities. Return a clean JSON object with keywords categorized into arrays (exact_match, broad_match, related_match) and outboundSuggestions array.'
+            content: 'You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities. Return a JSON object with keywords categorized into arrays (exact_match, broad_match, related_match) and outboundSuggestions array. Do not include any markdown formatting in your response.'
           },
           {
             role: 'user',
-            content: `Analyze this content and return a JSON object with keywords and linking suggestions:\n\n${truncatedContent}`
+            content: `Analyze this content and return a clean JSON object with keywords and linking suggestions:\n\n${truncatedContent}`
           }
         ],
-        temperature: 0.3
+        temperature: 0.3,
+        response_format: { type: "json_object" }
       }),
     });
 
@@ -50,7 +51,16 @@ export async function analyzeWithOpenAI(content: string) {
     }
 
     // Parse the response, ensuring it's clean JSON
-    const parsedResponse = JSON.parse(data.choices[0].message.content);
+    let parsedResponse;
+    try {
+      // Remove any potential markdown formatting
+      const cleanContent = data.choices[0].message.content.replace(/```json\n|\n```/g, '');
+      parsedResponse = JSON.parse(cleanContent);
+    } catch (parseError) {
+      logger.error('Error parsing OpenAI response:', parseError);
+      throw new Error('Failed to parse OpenAI response as JSON');
+    }
+
     logger.info('Successfully parsed OpenAI response');
 
     return {
