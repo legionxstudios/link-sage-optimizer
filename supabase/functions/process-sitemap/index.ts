@@ -84,7 +84,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Failed to process sitemap', 
-        details: { message: error.message } 
+        details: error.message 
       }),
       { 
         status: 500, 

@@ -46,7 +46,10 @@ export const fetchAndParseSitemap = async (url: string) => {
             const sitemapResponse = await fetch(robotsSitemapUrl);
             if (sitemapResponse.ok) {
               const sitemapText = await sitemapResponse.text();
-              return extractUrlsFromXml(sitemapText, robotsSitemapUrl);
+              const robotsUrls = await extractUrlsFromXml(sitemapText);
+              if (robotsUrls.length > 0) {
+                return robotsUrls;
+              }
             }
           } catch (error) {
             console.error('Error fetching sitemap from robots.txt URL:', error);
@@ -55,7 +58,7 @@ export const fetchAndParseSitemap = async (url: string) => {
         continue;
       }
 
-      const urls = extractUrlsFromXml(text, sitemapUrl);
+      const urls = await extractUrlsFromXml(text);
       if (urls.length > 0) {
         console.log(`Successfully found ${urls.length} URLs in ${sitemapUrl}`);
         return urls;
@@ -69,8 +72,8 @@ export const fetchAndParseSitemap = async (url: string) => {
   throw new Error('No valid sitemap found at any common location');
 }
 
-function extractUrlsFromXml(xml: string, sourceUrl: string): SitemapUrl[] {
-  console.log(`Extracting URLs from XML content from ${sourceUrl}`);
+async function extractUrlsFromXml(xml: string): Promise<SitemapUrl[]> {
+  console.log(`Extracting URLs from XML content, length: ${xml.length}`);
   const urls: SitemapUrl[] = [];
   
   // First check if this is a sitemap index
@@ -85,10 +88,10 @@ function extractUrlsFromXml(xml: string, sourceUrl: string): SitemapUrl[] {
         const childUrl = locMatch[1].trim();
         console.log('Found child sitemap:', childUrl);
         try {
-          const response = fetch(childUrl);
-          if (response) {
-            const childXml = response.text();
-            const childUrls = extractUrlsFromXml(childXml, childUrl);
+          const response = await fetch(childUrl);
+          if (response.ok) {
+            const childXml = await response.text();
+            const childUrls = await extractUrlsFromXml(childXml);
             urls.push(...childUrls);
           }
         } catch (error) {
