@@ -20,7 +20,7 @@ export function isValidWebpageUrl(url: string): boolean {
       'pdf', 'doc', 'docx', 'xls', 'xlsx',
       'zip', 'rar', 'tar', 'gz',
       'mp3', 'mp4', 'avi', 'mov',
-      'css', 'js', 'json'
+      'css', 'js', 'json', 'xml'
     ]);
 
     // Check if the extension is explicitly invalid

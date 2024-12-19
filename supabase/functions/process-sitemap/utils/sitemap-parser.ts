@@ -20,6 +20,9 @@ export const fetchAndParseSitemap = async (url: string) => {
 
   console.log('Will try these sitemap locations:', possibleSitemapUrls);
 
+  // If no sitemap is found, we'll collect URLs from the original page
+  let pageUrls: SitemapUrl[] = [];
+
   for (const sitemapUrl of possibleSitemapUrls) {
     try {
       console.log('Attempting to fetch from:', sitemapUrl);
@@ -27,7 +30,7 @@ export const fetchAndParseSitemap = async (url: string) => {
       const response = await fetch(sitemapUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)',
-          'Accept': 'text/xml, application/xml, text/plain, */*'
+          'Accept': 'text/xml, application/xml, text/html, text/plain, */*'
         }
       });
 
@@ -36,8 +39,9 @@ export const fetchAndParseSitemap = async (url: string) => {
         continue;
       }
 
+      const contentType = response.headers.get('content-type')?.toLowerCase() || '';
       const text = await response.text();
-      console.log(`Received content from ${sitemapUrl}, length: ${text.length}`);
+      console.log(`Received content from ${sitemapUrl}, type: ${contentType}, length: ${text.length}`);
       
       // If this is robots.txt, try to extract sitemap URL
       if (sitemapUrl.endsWith('robots.txt')) {
@@ -62,11 +66,25 @@ export const fetchAndParseSitemap = async (url: string) => {
         continue;
       }
 
-      // Try to parse as XML sitemap
-      const urls = await extractUrlsFromXml(text);
-      if (urls.length > 0) {
-        console.log(`Successfully found ${urls.length} URLs in ${sitemapUrl}`);
-        return urls;
+      // Try to parse as XML sitemap first
+      if (contentType.includes('xml') || text.includes('<?xml')) {
+        const urls = await extractUrlsFromXml(text);
+        if (urls.length > 0) {
+          console.log(`Successfully found ${urls.length} URLs in ${sitemapUrl}`);
+          return urls;
+        }
+      }
+      
+      // If we're at the original URL and it's HTML, try to extract links from it
+      if (sitemapUrl === url && (contentType.includes('html') || text.includes('<!DOCTYPE html>'))) {
+        console.log('Attempting to extract links from HTML page');
+        const urls = await extractUrlsFromHtml(text, baseUrl.origin);
+        if (urls.length > 0) {
+          pageUrls = urls;
+          console.log(`Found ${urls.length} valid URLs in HTML content`);
+          // Continue checking other possible sitemap locations
+          continue;
+        }
       }
       
     } catch (error) {
@@ -74,7 +92,15 @@ export const fetchAndParseSitemap = async (url: string) => {
     }
   }
 
-  throw new Error('Could not find a valid sitemap. Please ensure the site has a sitemap.xml file or check robots.txt for sitemap location.');
+  // If we found any URLs from the HTML page, return those
+  if (pageUrls.length > 0) {
+    return pageUrls;
+  }
+
+  throw new Error(
+    'Could not find a valid sitemap or extract URLs from the page. ' +
+    'Please ensure the site has a sitemap.xml file, or that the page contains valid links.'
+  );
 }
 
 async function extractUrlsFromXml(xml: string): Promise<SitemapUrl[]> {
@@ -127,11 +153,56 @@ async function extractUrlsFromXml(xml: string): Promise<SitemapUrl[]> {
       }
     }
 
-    console.log(`Found ${urls.length} valid webpage URLs in content`);
+    console.log(`Found ${urls.length} valid webpage URLs in XML content`);
     return urls;
     
   } catch (error) {
-    console.error('Error parsing content:', error);
+    console.error('Error parsing XML content:', error);
+    return [];
+  }
+}
+
+async function extractUrlsFromHtml(html: string, baseUrl: string): Promise<SitemapUrl[]> {
+  console.log('Extracting URLs from HTML content');
+  const urls: SitemapUrl[] = [];
+  
+  try {
+    // Use regex to find all links in the HTML
+    const linkPattern = /href=["'](.*?)["']/g;
+    let match;
+    const foundUrls = new Set<string>();
+
+    while ((match = linkPattern.exec(html)) !== null) {
+      try {
+        let url = match[1].trim();
+        
+        // Skip empty URLs, anchors, javascript:, mailto:, tel:, etc.
+        if (!url || url.startsWith('#') || url.includes('javascript:') || 
+            url.startsWith('mailto:') || url.startsWith('tel:')) {
+          continue;
+        }
+
+        // Convert relative URLs to absolute
+        if (url.startsWith('/')) {
+          url = `${baseUrl}${url}`;
+        } else if (!url.startsWith('http')) {
+          url = `${baseUrl}/${url}`;
+        }
+
+        // Validate and deduplicate URLs
+        if (isValidWebpageUrl(url) && !foundUrls.has(url)) {
+          foundUrls.add(url);
+          urls.push({ url, lastModified: null });
+        }
+      } catch (error) {
+        console.error('Error processing URL:', match[1], error);
+      }
+    }
+
+    console.log(`Extracted ${urls.length} valid URLs from HTML`);
+    return urls;
+  } catch (error) {
+    console.error('Error parsing HTML content:', error);
     return [];
   }
 }
