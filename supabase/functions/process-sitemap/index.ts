@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logger } from "./utils/logger.ts";
 
@@ -40,22 +39,14 @@ serve(async (req) => {
     const sitemapText = await response.text();
     logger.info(`Sitemap content length: ${sitemapText.length}`);
 
-    // Parse the XML
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(sitemapText, "text/xml");
-    
-    if (!xmlDoc) {
-      logger.error('Failed to parse sitemap XML');
-      throw new Error('Failed to parse sitemap XML');
-    }
-
-    // Extract URLs
-    const urls = Array.from(xmlDoc.getElementsByTagName('url'))
-      .map(urlElement => {
-        const loc = urlElement.getElementsByTagName('loc')[0]?.textContent;
-        const lastmod = urlElement.getElementsByTagName('lastmod')[0]?.textContent;
-        return { url: loc, lastModified: lastmod };
-      })
+    // Simple XML parsing using regex
+    // This is more reliable than using DOMParser for XML in Deno
+    const urlRegex = /<loc>(.*?)<\/loc>/g;
+    const urls = Array.from(sitemapText.matchAll(urlRegex))
+      .map(match => ({
+        url: match[1],
+        lastModified: null // We could extract lastmod tags similarly if needed
+      }))
       .filter(entry => entry.url);
 
     logger.info(`Found ${urls.length} URLs in sitemap`);
