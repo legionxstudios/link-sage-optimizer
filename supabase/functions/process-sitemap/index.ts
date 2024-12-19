@@ -1,27 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { fetchAndParseSitemap } from "./utils/sitemap-parser.ts";
 import { processUrlsInDatabase } from "./utils/db-operations.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createResponse } from "./utils/cors.ts";
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  // Handle CORS preflight
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    // Parse request body
     const text = await req.text();
     console.log('Raw request body:', text);
     
     if (!text) {
-      return new Response(
-        JSON.stringify({ error: 'Request body is empty' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return createResponse(
+        { error: 'Request body is empty' },
+        400
       );
     }
     
@@ -31,26 +25,26 @@ serve(async (req) => {
       console.log('Parsed request body:', requestBody);
     } catch (e) {
       console.error('Error parsing request body:', e);
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body', details: e.message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return createResponse(
+        { error: 'Invalid JSON in request body', details: e.message },
+        400
       );
     }
 
     const { url } = requestBody;
     if (!url) {
-      return new Response(
-        JSON.stringify({ error: 'URL is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return createResponse(
+        { error: 'URL is required' },
+        400
       );
     }
 
     try {
       new URL(url);
     } catch (e) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid URL format', details: e.message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return createResponse(
+        { error: 'Invalid URL format', details: e.message },
+        400
       );
     }
 
@@ -59,12 +53,12 @@ serve(async (req) => {
     console.log(`Successfully found ${urls.length} URLs in sitemap or page`);
 
     if (urls.length === 0) {
-      return new Response(
-        JSON.stringify({ 
+      return createResponse(
+        { 
           error: 'No URLs found',
           details: 'Could not find any valid URLs in the sitemap or page content.'
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        },
+        400
       );
     }
 
@@ -73,26 +67,17 @@ serve(async (req) => {
     console.log('Processing URLs for domain:', domain);
     const processedUrls = await processUrlsInDatabase(domain, urls);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Processed ${processedUrls.length} URLs from sitemap or page content`,
-        urls: processedUrls 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return createResponse({ 
+      success: true, 
+      message: `Processed ${processedUrls.length} URLs from sitemap or page content`,
+      urls: processedUrls 
+    });
 
   } catch (error) {
     console.error('Error processing sitemap:', error);
-    return new Response(
-      JSON.stringify({ 
-        error: 'Failed to process sitemap', 
-        details: error.message 
-      }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
+    return createResponse({ 
+      error: 'Failed to process sitemap', 
+      details: error.message 
+    }, 500);
   }
 });

@@ -1,6 +1,7 @@
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 export const handleCors = (req: Request) => {
@@ -10,20 +11,11 @@ export const handleCors = (req: Request) => {
   return null;
 };
 
-export const createErrorResponse = (error: string, details: any = {}, status = 400) => {
+export const createResponse = (body: any, status = 200) => {
   return new Response(
-    JSON.stringify({ error, details }), 
+    JSON.stringify(body),
     { 
       status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    }
-  );
-};
-
-export const createSuccessResponse = (data: any) => {
-  return new Response(
-    JSON.stringify(data),
-    { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     }
   );
