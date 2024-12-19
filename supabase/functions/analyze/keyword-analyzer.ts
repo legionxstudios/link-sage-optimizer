@@ -32,11 +32,17 @@ export const analyzeKeywords = async (content: string): Promise<{
           messages: [
             {
               role: 'system',
-              content: 'You are an SEO expert. Extract keywords from the content and categorize them into three arrays: exact_match (primary keywords), broad_match (related terms), and related_match (broader topics). Return ONLY a JSON object with these three arrays.'
+              content: `You are an SEO expert. Extract ONLY keywords and phrases that EXACTLY appear in the content.
+              Rules:
+              1. ONLY return phrases that exist VERBATIM in the content
+              2. Each phrase must be 2-3 words long
+              3. Do not modify or paraphrase the phrases
+              4. Verify each phrase appears exactly as written
+              5. Do not include single words or phrases longer than 3 words`
             },
             {
               role: 'user',
-              content: `Analyze this content and return a JSON object with three arrays of keywords (exact_match, broad_match, related_match). If the content is empty or invalid, return empty arrays:\n\n${content.substring(0, 2000)}`
+              content: `Extract ONLY 2-3 word phrases that appear EXACTLY in this content. Return ONLY phrases that exist VERBATIM in the text:\n\n${content.substring(0, 2000)}`
             }
           ],
           temperature: 0.3
@@ -60,74 +66,38 @@ export const analyzeKeywords = async (content: string): Promise<{
       const parsedKeywords = JSON.parse(data.choices[0].message.content);
       logger.info('Successfully extracted keywords from OpenAI:', parsedKeywords);
 
-      // Ensure we have the correct structure
-      return {
-        exact_match: Array.isArray(parsedKeywords.exact_match) ? parsedKeywords.exact_match : [],
-        broad_match: Array.isArray(parsedKeywords.broad_match) ? parsedKeywords.broad_match : [],
-        related_match: Array.isArray(parsedKeywords.related_match) ? parsedKeywords.related_match : []
+      // Verify each phrase exists in content
+      const verifyPhrase = (phrase: string): boolean => {
+        const pattern = new RegExp(`\\b${phrase.toLowerCase()}\\b`);
+        return pattern.test(content.toLowerCase());
       };
+
+      // Filter and categorize verified phrases
+      const verifiedPhrases = {
+        exact_match: (parsedKeywords.exact_match || [])
+          .filter((phrase: string) => verifyPhrase(phrase))
+          .slice(0, 10),
+        broad_match: (parsedKeywords.broad_match || [])
+          .filter((phrase: string) => verifyPhrase(phrase))
+          .slice(0, 10),
+        related_match: (parsedKeywords.related_match || [])
+          .filter((phrase: string) => verifyPhrase(phrase))
+          .slice(0, 10)
+      };
+
+      logger.info('Verified phrases:', verifiedPhrases);
+      return verifiedPhrases;
 
     } catch (openAIError) {
       logger.error('OpenAI keyword extraction failed:', openAIError);
-      logger.info('Falling back to Hugging Face for topic classification...');
-      
-      if (!HF_API_KEY) {
-        logger.error('Hugging Face API key is not configured');
-        throw new Error('Both OpenAI and Hugging Face API keys are not configured');
-      }
-      
-      const topicResponse = await fetch(
-        "https://api-inference.huggingface.co/models/facebook/bart-large-mnli",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${HF_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            inputs: content.substring(0, 1000),
-            parameters: {
-              candidate_labels: [
-                "technology", "business", "health", "education", 
-                "entertainment", "sports", "science", "politics", 
-                "lifestyle", "travel", "marketing", "software",
-                "ecommerce", "finance", "social media"
-              ],
-              multi_label: true
-            }
-          }),
-        }
-      );
-
-      if (!topicResponse.ok) {
-        const errorText = await topicResponse.text();
-        logger.error(`Hugging Face API error: ${topicResponse.status} ${topicResponse.statusText}`, errorText);
-        throw new Error(`Hugging Face API error: ${topicResponse.status} ${topicResponse.statusText}`);
-      }
-
-      const topicData = await topicResponse.json();
-      logger.debug('Topic analysis response:', topicData);
-      
-      if (!topicData.labels || !topicData.scores) {
-        logger.error('Invalid topic analysis response:', topicData);
-        throw new Error('Invalid topic analysis response');
-      }
-
-      const relevantTopics = topicData.labels
-        .filter((_: string, index: number) => topicData.scores[index] > 0.3);
-      
-      logger.info('Successfully extracted topics from Hugging Face:', relevantTopics);
-      
-      // Split the topics into three categories based on confidence scores
       return {
-        exact_match: relevantTopics.slice(0, 5),
-        broad_match: relevantTopics.slice(5, 10),
-        related_match: relevantTopics.slice(10, 15)
+        exact_match: [],
+        broad_match: [],
+        related_match: []
       };
     }
   } catch (error) {
     logger.error('All keyword analysis methods failed:', error);
-    // Return empty arrays as fallback
     return {
       exact_match: [],
       broad_match: [],
