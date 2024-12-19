@@ -6,6 +6,7 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 export async function extractKeywords(content: string, themes: string[]): Promise<string[]> {
   try {
     logger.info('Extracting keywords based on themes:', themes);
+    logger.debug('Content sample:', content.substring(0, 200));
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -18,17 +19,19 @@ export async function extractKeywords(content: string, themes: string[]): Promis
         messages: [
           {
             role: 'system',
-            content: `You are an SEO expert. Extract ONLY 2-3 word phrases that exist EXACTLY in the content and could be used as anchor text for internal linking.
-                     The content themes are: ${themes.join(', ')}.
-                     Return ONLY phrases that exist VERBATIM in the content as a JSON array of strings.
+            content: `You are an SEO expert analyzing content about: ${themes.join(', ')}. 
+                     Extract ONLY 2-3 word phrases that exist EXACTLY in the content.
                      Rules:
-                     1. ONLY return phrases that exist VERBATIM in the content
-                     2. Each phrase must be 2-3 words
-                     3. Phrases should be relevant to the themes`
+                     1. Each phrase must be 2-3 words long
+                     2. Phrases must exist VERBATIM in the content
+                     3. Focus on key topics and themes
+                     4. Return as a JSON array of strings
+                     5. Do not include single words or phrases longer than 3 words
+                     6. Do not include URLs or navigation text`
           },
           {
             role: 'user',
-            content: content
+            content: `Extract ONLY 2-3 word phrases that appear EXACTLY in this content:\n\n${content}`
           }
         ],
         temperature: 0.3,
@@ -40,17 +43,24 @@ export async function extractKeywords(content: string, themes: string[]): Promis
     }
 
     const data = await response.json();
+    if (!data.choices?.[0]?.message?.content) {
+      logger.error('Invalid OpenAI response structure:', data);
+      return [];
+    }
+
     const responseContent = data.choices[0].message.content.trim();
+    logger.info('Raw OpenAI response:', responseContent);
     
-    // Clean the response content by removing any markdown formatting
+    // Clean the response content
     const cleanContent = responseContent.replace(/```json\n|\n```|```/g, '').trim();
+    logger.info('Cleaned content:', cleanContent);
     
     let phrases: string[];
     try {
       phrases = JSON.parse(cleanContent);
       if (!Array.isArray(phrases)) {
         logger.error('OpenAI response is not an array:', cleanContent);
-        throw new Error('Phrases must be an array');
+        return [];
       }
     } catch (e) {
       logger.error('Error parsing phrases:', e);
@@ -60,11 +70,22 @@ export async function extractKeywords(content: string, themes: string[]): Promis
 
     // Verify each phrase exists in content
     const verifiedPhrases = [];
+    const contentLower = content.toLowerCase();
+    
     for (const phrase of phrases) {
-      const context = findExactPhraseContext(content, phrase);
-      if (context) {
-        verifiedPhrases.push(phrase);
-        logger.info(`Verified phrase: "${phrase}" with context: ${context}`);
+      if (typeof phrase !== 'string') {
+        logger.warn('Invalid phrase type:', typeof phrase);
+        continue;
+      }
+      
+      const phraseLower = phrase.toLowerCase();
+      // Check if phrase exists with word boundaries
+      if (new RegExp(`\\b${phraseLower}\\b`).test(contentLower)) {
+        const context = findExactPhraseContext(content, phrase);
+        if (context) {
+          verifiedPhrases.push(phrase);
+          logger.info(`Verified phrase: "${phrase}" with context: ${context}`);
+        }
       } else {
         logger.warn(`Phrase not found in content: ${phrase}`);
       }

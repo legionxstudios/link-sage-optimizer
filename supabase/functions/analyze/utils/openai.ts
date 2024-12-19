@@ -5,6 +5,7 @@ import { findExactPhraseContext } from "./context-finder.ts";
 import { detectTheme } from "./theme-detector.ts";
 import { findRelatedPages } from "./page-analyzer.ts";
 import { extractKeywords } from "./keyword-extractor.ts";
+import { isValidUrl, normalizeUrl } from "./url-validator.ts";
 
 export async function analyzeWithOpenAI(content: string, existingPages: ExistingPage[]): Promise<AnalysisResult> {
   try {
@@ -47,18 +48,25 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
         continue;
       }
 
-      // Add to verified keywords
+      // Add to verified keywords with context
       verifiedKeywords.exact_match.push(`${phrase} - ${context}`);
 
       // Match with related pages
       for (const page of relatedPages) {
-        if (!page.url || existingLinks.some(link => link.url === page.url)) {
+        if (!page.url || !isValidUrl(page.url)) {
+          logger.warn(`Invalid URL for page: ${page.url}`);
+          continue;
+        }
+
+        const normalizedUrl = normalizeUrl(page.url);
+        if (existingLinks.some(link => normalizeUrl(link.url) === normalizedUrl)) {
+          logger.info(`Skipping existing link: ${normalizedUrl}`);
           continue;
         }
 
         suggestions.push({
           suggestedAnchorText: phrase,
-          targetUrl: page.url,
+          targetUrl: normalizedUrl,
           targetTitle: page.title || '',
           context,
           matchType: "theme_based",
