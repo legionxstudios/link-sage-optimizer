@@ -7,16 +7,18 @@ export async function analyzeWithOpenAI(
   existingPages: ExistingPage[]
 ): Promise<AnalysisResult> {
   try {
-    if (!Deno.env.get('OPENAI_API_KEY')) {
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+    
+    if (!openAIApiKey) {
       logger.error('OpenAI API key is not configured');
-      throw new Error('OpenAI API key is not configured');
+      throw new Error('OpenAI API key is not configured. Please set it in the Supabase secrets.');
     }
 
     logger.info('Starting OpenAI analysis...');
     logger.info(`Analyzing content with ${existingPages.length} existing pages`);
 
     // Extract keywords using OpenAI
-    const keywords = await extractKeywords(content);
+    const keywords = await extractKeywords(content, openAIApiKey);
     logger.info('Extracted keywords:', keywords);
 
     // Generate link suggestions based on keywords and existing pages
@@ -34,15 +36,15 @@ export async function analyzeWithOpenAI(
   }
 }
 
-async function extractKeywords(content: string) {
+async function extractKeywords(content: string, apiKey: string) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -63,6 +65,8 @@ async function extractKeywords(content: string) {
   });
 
   if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(`OpenAI API error: ${response.status}`, errorText);
     throw new Error(`OpenAI API error: ${response.status}`);
   }
 

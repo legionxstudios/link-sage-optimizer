@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url, crawlCompleted } = await req.json();
+    const { url } = await req.json();
     logger.info('Starting analysis for:', url);
 
     if (!url) {
