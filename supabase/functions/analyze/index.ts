@@ -34,15 +34,29 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch page content
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)'
+    // Fetch page content with retries
+    let response;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)'
+          }
+        });
+        if (response.ok) break;
+        retries--;
+        if (retries > 0) await new Promise(r => setTimeout(r, 1000));
+      } catch (error) {
+        logger.error(`Fetch attempt failed (${retries} retries left):`, error);
+        retries--;
+        if (retries === 0) throw error;
+        await new Promise(r => setTimeout(r, 1000));
       }
-    });
+    }
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch page: ${response.status}`);
+    if (!response?.ok) {
+      throw new Error(`Failed to fetch page: ${response?.status}`);
     }
 
     const html = await response.text();

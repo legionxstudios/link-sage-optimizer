@@ -6,7 +6,7 @@ export interface LinkSuggestion {
   context: string;
   matchType: string;
   relevanceScore: number;
-  targetUrl: string;
+  targetUrl?: string;
   targetTitle?: string;
 }
 
@@ -19,15 +19,37 @@ export interface AnalysisResponse {
   outboundSuggestions: LinkSuggestion[];
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const retryWithBackoff = async <T>(
+  operation: () => Promise<T>,
+  retries: number = MAX_RETRIES
+): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (retries === 0) throw error;
+    
+    await sleep(RETRY_DELAY * (MAX_RETRIES - retries + 1));
+    console.log(`Retrying operation, ${retries} attempts remaining`);
+    return retryWithBackoff(operation, retries - 1);
+  }
+};
+
 export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
     // First process the sitemap
     console.log("Processing sitemap for URL:", url);
-    const { data: sitemapData, error: sitemapError } = await supabase.functions.invoke('process-sitemap', {
-      body: { url }
-    });
+    const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
+      supabase.functions.invoke('process-sitemap', {
+        body: { url }
+      })
+    );
 
     if (sitemapError) {
       console.error("Sitemap processing error:", sitemapError);
@@ -40,9 +62,11 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     // Then analyze the page
     console.log("Invoking analyze function with URL:", url);
-    const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze', {
-      body: { url }
-    });
+    const { data: analysisData, error: analysisError } = await retryWithBackoff(() =>
+      supabase.functions.invoke('analyze', {
+        body: { url }
+      })
+    );
 
     if (analysisError) {
       console.error("Analysis error:", analysisError);
