@@ -1,4 +1,4 @@
-from typing import Set, List
+from typing import Set, List, Dict, Tuple
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.tag import pos_tag
 from nltk.corpus import stopwords
@@ -12,8 +12,10 @@ class PhraseExtractor:
         self.stop_words = set(stopwords.words('english'))
         
     def extract_phrases(self, text: str) -> Set[str]:
-        """Extract meaningful 2-3 word phrases that actually appear in the content."""
-        logger.info("Extracting phrases from text")
+        """Extract phrases that EXACTLY exist in the content with their contexts."""
+        logger.info("Extracting exact phrases from text")
+        
+        # Split into sentences for better context
         sentences = sent_tokenize(text)
         phrases = set()
         
@@ -25,19 +27,33 @@ class PhraseExtractor:
             # Extract 2-word phrases
             for i in range(len(pos_tags) - 1):
                 if self._is_valid_bigram(pos_tags[i], pos_tags[i+1]):
-                    phrase = f"{pos_tags[i][0].lower()} {pos_tags[i+1][0].lower()}"
-                    if self._is_valid_phrase(phrase) and self._appears_in_text(phrase, text):
+                    phrase = f"{pos_tags[i][0]} {pos_tags[i+1][0]}"
+                    if self._verify_exact_match(phrase, text):
                         phrases.add(phrase)
             
             # Extract 3-word phrases
             for i in range(len(pos_tags) - 2):
                 if self._is_valid_trigram(pos_tags[i], pos_tags[i+1], pos_tags[i+2]):
-                    phrase = f"{pos_tags[i][0].lower()} {pos_tags[i+1][0].lower()} {pos_tags[i+2][0].lower()}"
-                    if self._is_valid_phrase(phrase) and self._appears_in_text(phrase, text):
+                    phrase = f"{pos_tags[i][0]} {pos_tags[i+1][0]} {pos_tags[i+2][0]}"
+                    if self._verify_exact_match(phrase, text):
                         phrases.add(phrase)
         
-        logger.info(f"Extracted {len(phrases)} unique phrases that appear in content")
+        logger.info(f"Extracted {len(phrases)} exact phrases from content")
         return phrases
+    
+    def _verify_exact_match(self, phrase: str, text: str) -> bool:
+        """Verify that the phrase exists exactly in the text with word boundaries."""
+        # Create pattern with word boundaries and optional spaces
+        pattern = r'\b' + re.escape(phrase) + r'\b'
+        match = re.search(pattern, text)
+        
+        if match:
+            # Get the exact phrase as it appears in the text
+            exact_phrase = text[match.start():match.end()]
+            logger.debug(f"Found exact match: '{exact_phrase}' for phrase: '{phrase}'")
+            return True
+            
+        return False
     
     def _is_valid_bigram(self, tag1, tag2) -> bool:
         """Check if two consecutive POS tags form a valid bigram."""
@@ -55,24 +71,28 @@ class PhraseExtractor:
         ]
         return (tag1[1], tag2[1], tag3[1]) in valid_patterns
     
-    def _is_valid_phrase(self, phrase: str) -> bool:
-        """Check if a phrase is valid (not containing stop words at edges)."""
-        words = phrase.split()
-        return (
-            len(words) in [2, 3] and
-            words[0] not in self.stop_words and
-            words[-1] not in self.stop_words and
-            all(len(word) > 2 for word in words)
-        )
-
-    def _appears_in_text(self, phrase: str, text: str) -> bool:
-        """Check if the exact phrase appears in the text."""
-        # Convert both to lowercase for case-insensitive matching
-        text_lower = text.lower()
-        phrase_lower = phrase.lower()
+    def find_exact_context(self, phrase: str, text: str, context_length: int = 100) -> str:
+        """Find the exact context where a phrase appears in the text."""
+        pattern = r'\b' + re.escape(phrase) + r'\b'
+        match = re.search(pattern, text)
         
-        # Create a pattern that matches word boundaries
-        pattern = r'\b' + re.escape(phrase_lower) + r'\b'
+        if not match:
+            logger.warning(f"Could not find exact context for phrase: {phrase}")
+            return ""
+            
+        start_pos = match.start()
+        end_pos = match.end()
         
-        # Return True if the phrase is found with word boundaries
-        return bool(re.search(pattern, text_lower))
+        # Get surrounding context
+        context_start = max(0, start_pos - context_length)
+        context_end = min(len(text), end_pos + context_length)
+        
+        # Get the exact phrase as it appears in the text
+        exact_phrase = text[start_pos:end_pos]
+        context = text[context_start:context_end].strip()
+        
+        # Highlight the exact phrase in the context
+        highlighted_context = context.replace(exact_phrase, f"[{exact_phrase}]")
+        
+        logger.info(f"Found context for phrase '{phrase}': {highlighted_context}")
+        return highlighted_context

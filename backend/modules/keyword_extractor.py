@@ -5,7 +5,7 @@ from .keyword_extraction import PhraseExtractor, DensityCalculator, RelevanceSco
 logger = logging.getLogger(__name__)
 
 async def extract_keywords(content: str) -> Dict[str, List[str]]:
-    """Extract meaningful 2-3 word phrases that MUST exist in the content."""
+    """Extract meaningful phrases that MUST exist exactly in the content."""
     try:
         if not content or len(content.strip()) < 50:
             logger.warning("Content too short for keyword extraction")
@@ -36,12 +36,10 @@ async def extract_keywords(content: str) -> Dict[str, List[str]]:
         # Combine density and relevance scores for verified phrases only
         final_scores = {}
         for phrase in phrases:
-            # Double verify the phrase exists in content
-            if not extractor._appears_in_text(phrase, content):
-                logger.debug(f"Skipping phrase not found in content: {phrase}")
-                continue
-                
-            if len(phrase.split()) not in [2, 3]:
+            # Double verify the phrase exists in content with exact context
+            context = extractor.find_exact_context(phrase, content)
+            if not context:
+                logger.debug(f"Skipping phrase with no context: {phrase}")
                 continue
                 
             density = densities.get(phrase, 0)
@@ -62,29 +60,30 @@ async def extract_keywords(content: str) -> Dict[str, List[str]]:
         related_match = []
         
         for phrase, score in sorted_phrases:
-            # Final verification that phrase exists in content
-            if not extractor._appears_in_text(phrase, content):
+            # Get the exact context for the phrase
+            context = extractor.find_exact_context(phrase, content)
+            if not context:
                 continue
                 
             density_str = f"{densities.get(phrase, 0):.2%}"
-            phrase_with_density = f"{phrase} ({density_str})"
+            phrase_with_context = f"{phrase} ({density_str}) - {context}"
             
             if score >= 0.8:
-                exact_match.append(phrase_with_density)
+                exact_match.append(phrase_with_context)
             elif score >= 0.6:
-                broad_match.append(phrase_with_density)
+                broad_match.append(phrase_with_context)
             elif score >= 0.4:
-                related_match.append(phrase_with_density)
+                related_match.append(phrase_with_context)
         
         logger.info(f"Final verified keyword counts: exact={len(exact_match)}, broad={len(broad_match)}, related={len(related_match)}")
         
         result = {
-            'exact_match': exact_match[:10],  # Reduced from 15 to ensure higher quality
+            'exact_match': exact_match[:10],
             'broad_match': broad_match[:10],
             'related_match': related_match[:10]
         }
         
-        logger.info("Keyword extraction completed with verified phrases only")
+        logger.info("Keyword extraction completed with verified phrases and contexts")
         return result
         
     except Exception as e:
