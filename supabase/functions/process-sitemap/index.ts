@@ -3,12 +3,18 @@ import { fetchAndParseSitemap } from "./utils/sitemap-parser.ts";
 import { processUrlsInDatabase } from "./utils/db-operations.ts";
 import { corsHeaders, handleCors, createResponse } from "./utils/cors.ts";
 
+console.log("Process sitemap function started");
+
 serve(async (req) => {
   // Handle CORS preflight
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
   try {
+    if (req.method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
     const text = await req.text();
     console.log('Raw request body:', text);
     

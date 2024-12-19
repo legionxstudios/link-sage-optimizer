@@ -5,8 +5,9 @@ export const corsHeaders = {
 };
 
 export const handleCors = (req: Request) => {
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
   return null;
 };
@@ -16,7 +17,10 @@ export const createResponse = (body: any, status = 200) => {
     JSON.stringify(body),
     { 
       status,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'application/json'
+      }
     }
   );
 };
