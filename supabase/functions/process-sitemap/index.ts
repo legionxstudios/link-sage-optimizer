@@ -9,19 +9,25 @@ serve(async (req) => {
   if (corsResponse) return corsResponse;
 
   try {
-    // Parse request body with better error handling
-    let body;
+    // Parse request body
+    let requestBody;
     try {
       const text = await req.text();
-      console.log('Received request body:', text); // Log the raw request body
-      body = JSON.parse(text);
+      console.log('Raw request body:', text); // Log raw request body
+      
+      if (!text) {
+        return createErrorResponse('Request body is empty');
+      }
+      
+      requestBody = JSON.parse(text);
+      console.log('Parsed request body:', requestBody);
     } catch (e) {
       console.error('Error parsing request body:', e);
       return createErrorResponse('Invalid JSON in request body', e.message);
     }
 
-    const { url } = body;
-    console.log('Starting sitemap processing for URL:', url);
+    const { url } = requestBody;
+    console.log('Processing URL:', url);
     
     if (!url) {
       return createErrorResponse('URL is required');
@@ -52,8 +58,8 @@ serve(async (req) => {
     } catch (error) {
       console.error('Error processing sitemap:', error);
       return createErrorResponse(
-        error.message,
-        { stack: error.stack },
+        'Failed to process sitemap',
+        { message: error.message },
         500
       );
     }
@@ -62,7 +68,7 @@ serve(async (req) => {
     console.error('Unexpected error:', error);
     return createErrorResponse(
       'Internal server error',
-      { message: error.message, stack: error.stack },
+      { message: error.message },
       500
     );
   }
