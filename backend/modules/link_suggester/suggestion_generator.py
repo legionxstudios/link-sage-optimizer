@@ -1,21 +1,14 @@
 import logging
-import os
 from typing import List, Dict, Any
-from supabase import create_client
-from .context_finder import find_phrase_context, calculate_relevance_score
+from .context_finder import find_phrase_context
+from .relevance_calculator import calculate_relevance_score
 
 logger = logging.getLogger(__name__)
 
-async def generate_suggestions_from_phrases(key_phrases: List[str], content: str) -> List[Dict]:
+async def generate_suggestions_from_phrases(key_phrases: List[str], content: str, supabase) -> List[Dict]:
     """Generate link suggestions based on key phrases."""
     try:
         logger.info(f"Generating suggestions for {len(key_phrases)} phrases")
-        
-        # Initialize Supabase client
-        supabase = create_client(
-            os.getenv('SUPABASE_URL', ''),
-            os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
-        )
         
         suggestions = []
         
