@@ -1,10 +1,6 @@
 import { logger } from "./logger.ts";
 import { ExistingPage, AnalysisResult } from "./types.ts";
-import { extractExistingLinks } from "./link-extractor.ts";
-import { findExactPhraseContext } from "./context-finder.ts";
-import { detectTheme } from "./theme-detector.ts";
-import { findRelatedPages } from "./page-analyzer.ts";
-import { isValidUrl, normalizeUrl } from "./url-validator.ts";
+import { isValidWebpageUrl } from "./url-validator.ts";
 
 export async function analyzeWithOpenAI(content: string, existingPages: ExistingPage[]): Promise<AnalysisResult> {
   try {
@@ -16,15 +12,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     logger.info('Starting OpenAI analysis...');
     logger.info(`Analyzing content with ${existingPages.length} existing pages`);
     
-    // 1. First detect the themes of the input content
-    const themes = await detectTheme(content);
-    logger.info('Content themes:', themes);
-    
-    // 2. Extract existing links to avoid duplicates
-    const existingLinks = extractExistingLinks(content);
-    logger.info(`Found ${existingLinks.length} existing links in content`);
-
-    // 3. First get keywords to use for suggestions
+    // First get keywords
     const keywordsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -77,7 +65,21 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       logger.error('Raw content:', keywordsData.choices[0].message.content);
     }
 
-    // 4. Generate link suggestions using the extracted exact match keywords
+    // Filter existing pages to only include valid HTML pages (no images)
+    const validPages = existingPages.filter(page => {
+      if (!page.url || !isValidWebpageUrl(page.url)) {
+        return false;
+      }
+      // Don't include the current page
+      if (page.url === content.url) {
+        return false;
+      }
+      return true;
+    });
+
+    logger.info(`Found ${validPages.length} valid HTML pages for linking`);
+
+    // Generate link suggestions using the extracted exact match keywords
     const suggestionsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -90,21 +92,24 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
           {
             role: 'system',
             content: `You are an SEO expert analyzing content and suggesting internal links. 
-            Use ONLY the provided exact match keywords as anchor text for suggestions.
-            For each existing page provided, determine if it would make a good link target based on relevance.
-            Consider semantic relevance between the keyword and the target page content.
-            Return ONLY a JSON array of suggestions, with no markdown formatting or additional text.
-            Each suggestion must have:
-            - suggestedAnchorText: MUST be one of the provided exact match keywords
-            - targetUrl: URL of the target page
-            - context: Brief description of why this link is relevant
+            Rules:
+            1. ONLY use the provided exact match keywords as anchor text
+            2. ONLY suggest internal HTML pages (no images or external links)
+            3. Each suggestion must use a keyword that appears EXACTLY in the source content
+            4. Do not suggest linking back to the same page
+            5. Verify semantic relevance between keyword and target page
+            
+            Return ONLY a JSON array of suggestions with:
+            - suggestedAnchorText: one of the provided exact match keywords
+            - targetUrl: URL of an internal HTML page
+            - context: Brief description of relevance
             - relevanceScore: 0-1 score based on semantic relevance
             - matchType: "keyword_based" for suggestions using exact match keywords`
           },
           {
             role: 'user',
             content: `Content to analyze: ${content}\n\nExact match keywords: ${JSON.stringify(keywords.exact_match)}\n\nAvailable pages to link to:\n${
-              existingPages.map(page => `URL: ${page.url}\nTitle: ${page.title}\nContent: ${page.content?.substring(0, 500)}...\n---`).join('\n')
+              validPages.map(page => `URL: ${page.url}\nTitle: ${page.title}\nContent: ${page.content?.substring(0, 500)}...\n---`).join('\n')
             }`
           }
         ],
@@ -132,7 +137,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       logger.error('Raw content:', suggestionsData.choices[0].message.content);
     }
 
-    // 5. Validate and format suggestions
+    // Additional validation of suggestions
     const validatedSuggestions = suggestions
       .filter(suggestion => {
         // Verify the suggested anchor text is from our exact match keywords
@@ -141,15 +146,22 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
           return false;
         }
         
-        if (!suggestion.targetUrl || !isValidUrl(suggestion.targetUrl)) {
+        // Verify it's a valid webpage URL
+        if (!suggestion.targetUrl || !isValidWebpageUrl(suggestion.targetUrl)) {
           logger.warn(`Invalid URL in suggestion: ${suggestion.targetUrl}`);
           return false;
         }
+
+        // Verify it's not linking to the same page
+        if (suggestion.targetUrl === content.url) {
+          logger.warn(`Skipping self-referential link: ${suggestion.targetUrl}`);
+          return false;
+        }
+
         return true;
       })
       .map(suggestion => ({
         ...suggestion,
-        targetUrl: normalizeUrl(suggestion.targetUrl),
         matchType: "keyword_based",
         relevanceScore: suggestion.relevanceScore || 0.5
       }));
@@ -158,8 +170,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     
     return {
       keywords,
-      outboundSuggestions: validatedSuggestions,
-      themes
+      outboundSuggestions: validatedSuggestions
     };
 
   } catch (error) {

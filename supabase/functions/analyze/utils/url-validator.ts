@@ -1,33 +1,35 @@
-import { logger } from "./logger.ts";
-
-export function isValidUrl(urlString: string): boolean {
+export function isValidWebpageUrl(url: string): boolean {
   try {
-    const url = new URL(urlString);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch (e) {
-    logger.warn(`Invalid URL: ${urlString}`, e);
-    return false;
-  }
-}
-
-export function normalizeUrl(urlString: string): string {
-  try {
-    const url = new URL(urlString);
-    // Remove trailing slashes and normalize to lowercase
-    let normalized = url.origin.toLowerCase() + url.pathname.toLowerCase();
-    normalized = normalized.replace(/\/+$/, '');
+    const parsedUrl = new URL(url);
     
-    // Keep the query parameters if they exist, but sort them
-    if (url.search) {
-      const searchParams = new URLSearchParams(url.search);
-      const sortedParams = new URLSearchParams([...searchParams.entries()].sort());
-      normalized += '?' + sortedParams.toString();
+    // Check if URL has a valid protocol
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      console.log(`Invalid protocol for URL ${url}: ${parsedUrl.protocol}`);
+      return false;
     }
-    
-    logger.info(`Normalized URL: ${urlString} -> ${normalized}`);
-    return normalized;
-  } catch (e) {
-    logger.error(`Error normalizing URL: ${urlString}`, e);
-    return urlString;
+
+    // Get file extension if any
+    const pathname = parsedUrl.pathname;
+    const extension = pathname.split('.').pop()?.toLowerCase();
+
+    // List of invalid extensions (files we don't want to process)
+    const invalidExtensions = new Set([
+      'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 
+      'pdf', 'doc', 'docx', 'xls', 'xlsx',
+      'zip', 'rar', 'tar', 'gz',
+      'mp3', 'mp4', 'avi', 'mov',
+      'css', 'js', 'json'
+    ]);
+
+    // Check if the extension is explicitly invalid
+    if (extension && invalidExtensions.has(extension)) {
+      console.log(`Filtered out file with extension: ${extension}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error validating URL:', error);
+    return false;
   }
 }
