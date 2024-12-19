@@ -11,22 +11,24 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
 
     logger.info('Starting OpenAI analysis...');
     
-    // Filter for blog content pages only
-    const blogPages = existingPages.filter(page => {
-      // Check if URL contains /blog/ and isn't the current page
-      return page.url.includes('/blog/') && 
+    // Filter for valid content pages
+    const contentPages = existingPages.filter(page => {
+      return page.url && 
+             page.title &&
+             page.content &&
              // Exclude common non-content paths
              !page.url.includes('/cart') &&
              !page.url.includes('/checkout') &&
              !page.url.includes('/my-account') &&
              !page.url.includes('/wp-content') &&
-             // Ensure we have a title and content
-             page.title &&
-             page.content;
+             !page.url.includes('.css') &&
+             !page.url.includes('.js') &&
+             !page.url.includes('/assets/') &&
+             !page.url.includes('/images/');
     });
 
-    logger.info(`Found ${blogPages.length} relevant blog pages for linking`);
-    logger.debug('Blog pages:', blogPages.map(p => ({ url: p.url, title: p.title })));
+    logger.info(`Found ${contentPages.length} potential pages for linking`);
+    logger.debug('Content pages:', contentPages.map(p => ({ url: p.url, title: p.title })));
 
     // First get keywords from the content
     const keywordsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -95,15 +97,14 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
             role: 'system',
             content: `You are an SEO expert analyzing content and suggesting internal links. 
             Rules:
-            1. For each target page, identify its main topic/theme from its title
-            2. Find keywords from the source content that BEST DESCRIBE the target page's topic
+            1. For each target page, identify its main topics/themes from its title and first paragraph
+            2. Find keywords from the source content that BEST DESCRIBE the target page's topics
             3. Only use keywords that appear EXACTLY in the source content
             4. The anchor text should semantically match the target page's topic
             5. Do not suggest linking back to the same page
             6. Ensure strong topical relevance between source content and target page
-            
-            Example:
-            If target page is about "vintage photography guide", use anchor text like "vintage photography tips" that appears in source content, NOT product names like "Polaroid SX-70".
+            7. Consider all available keywords (exact, broad, and related matches)
+            8. Each target URL should only be suggested once with its most relevant keyword
             
             Return ONLY a JSON array of suggestions with:
             - suggestedAnchorText: keyword from source that best describes target page's topic
@@ -114,8 +115,12 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
           },
           {
             role: 'user',
-            content: `Source content: ${content}\n\nAvailable keywords: ${JSON.stringify(keywords.exact_match)}\n\nTarget pages:\n${
-              blogPages.map(page => `URL: ${page.url}\nTitle: ${page.title}\nContent: ${page.content?.substring(0, 500)}...\n---`).join('\n')
+            content: `Source content: ${content}\n\nAvailable keywords: ${JSON.stringify({
+              exact: keywords.exact_match,
+              broad: keywords.broad_match,
+              related: keywords.related_match
+            })}\n\nTarget pages:\n${
+              contentPages.map(page => `URL: ${page.url}\nTitle: ${page.title}\nContent: ${page.content?.substring(0, 500)}...\n---`).join('\n')
             }`
           }
         ],
@@ -144,18 +149,27 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       logger.error('Raw content:', suggestionsData.choices[0].message.content);
     }
 
-    // Validate suggestions
+    // Track used URLs to avoid duplicates
+    const usedUrls = new Set();
+
+    // Validate suggestions and ensure unique target URLs
     const validatedSuggestions = suggestions
       .filter(suggestion => {
         // Verify the suggested anchor text exists in our keywords
-        if (!keywords.exact_match.includes(suggestion.suggestedAnchorText)) {
-          logger.warn(`Suggestion skipped - anchor text not in exact matches: ${suggestion.suggestedAnchorText}`);
+        const allKeywords = [
+          ...keywords.exact_match,
+          ...keywords.broad_match,
+          ...keywords.related_match
+        ];
+        
+        if (!allKeywords.includes(suggestion.suggestedAnchorText)) {
+          logger.warn(`Suggestion skipped - anchor text not in keywords: ${suggestion.suggestedAnchorText}`);
           return false;
         }
-        
-        // Verify target URL is a blog post
-        if (!suggestion.targetUrl?.includes('/blog/')) {
-          logger.warn(`Invalid URL in suggestion (not a blog post): ${suggestion.targetUrl}`);
+
+        // Skip if URL is invalid or already used
+        if (!suggestion.targetUrl || usedUrls.has(suggestion.targetUrl)) {
+          logger.warn(`Skipping duplicate or invalid URL: ${suggestion.targetUrl}`);
           return false;
         }
 
@@ -165,6 +179,8 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
           return false;
         }
 
+        // Add URL to used set if suggestion is valid
+        usedUrls.add(suggestion.targetUrl);
         return true;
       })
       .map(suggestion => ({
