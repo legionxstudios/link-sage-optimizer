@@ -106,6 +106,15 @@ export const fetchAndParseSitemap = async (url: string): Promise<SitemapResponse
   );
 };
 
+function cleanUrl(url: string): string {
+  // Remove CDATA if present
+  const cdataMatch = url.match(/<!\[CDATA\[(.*?)\]\]>/);
+  if (cdataMatch) {
+    return cdataMatch[1].trim();
+  }
+  return url.trim();
+}
+
 async function extractUrlsFromXml(xml: string): Promise<SitemapUrl[]> {
   console.log('Processing XML content');
   const urls: SitemapUrl[] = [];
@@ -119,7 +128,7 @@ async function extractUrlsFromXml(xml: string): Promise<SitemapUrl[]> {
       for (const sitemapEntry of sitemapMatches) {
         const locMatch = sitemapEntry.match(/<loc>(.*?)<\/loc>/);
         if (locMatch && locMatch[1]) {
-          const childUrl = locMatch[1].trim();
+          const childUrl = cleanUrl(locMatch[1]);
           console.log('Found child sitemap:', childUrl);
           try {
             const response = await fetch(childUrl);
@@ -143,18 +152,20 @@ async function extractUrlsFromXml(xml: string): Promise<SitemapUrl[]> {
         const lastmodMatch = urlEntry.match(/<lastmod>(.*?)<\/lastmod>/);
         
         if (locMatch && locMatch[1]) {
-          const url = locMatch[1].trim();
+          const url = cleanUrl(locMatch[1]);
           if (url && isValidWebpageUrl(url)) {
             urls.push({
               url,
-              lastModified: lastmodMatch ? lastmodMatch[1].trim() : null
+              lastModified: lastmodMatch ? cleanUrl(lastmodMatch[1]) : null
             });
+          } else {
+            console.log(`Filtered out invalid or non-webpage URL: ${url}`);
           }
         }
       }
     }
 
-    console.log(`Found ${urls.length} valid URLs in XML content`);
+    console.log(`Found ${urls.length} valid webpage URLs in XML content`);
     return urls;
     
   } catch (error) {
