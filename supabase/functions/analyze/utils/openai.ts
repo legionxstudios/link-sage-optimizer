@@ -10,6 +10,9 @@ export async function analyzeWithOpenAI(content: string) {
 
     logger.info('Analyzing content with OpenAI...');
     
+    // Truncate content to avoid token limits
+    const truncatedContent = content.substring(0, 3000);
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -17,19 +20,18 @@ export async function analyzeWithOpenAI(content: string) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: 'You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities. Return a clean JSON object with keywords categorized into arrays (exact_match, broad_match, related_match) and outboundSuggestions array with specific target URLs.'
+            content: 'You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities. Return a clean JSON object with keywords categorized into arrays (exact_match, broad_match, related_match) and outboundSuggestions array.'
           },
           {
             role: 'user',
-            content: `Analyze this content and return a JSON object with keywords and linking suggestions. Include specific target URLs for each suggestion:\n\n${content.substring(0, 2000)}`
+            content: `Analyze this content and return a JSON object with keywords and linking suggestions:\n\n${truncatedContent}`
           }
         ],
-        temperature: 0.3,
-        response_format: { type: "json_object" }
+        temperature: 0.3
       }),
     });
 
@@ -49,7 +51,7 @@ export async function analyzeWithOpenAI(content: string) {
 
     // Parse the response, ensuring it's clean JSON
     const parsedResponse = JSON.parse(data.choices[0].message.content);
-    logger.info('Successfully parsed OpenAI response:', parsedResponse);
+    logger.info('Successfully parsed OpenAI response');
 
     return {
       keywords: {

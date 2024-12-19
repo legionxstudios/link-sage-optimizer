@@ -1,9 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logger } from "./utils/logger.ts";
 import { fetchAndExtractContent } from "./utils/content-extractor.ts";
 import { analyzeWithOpenAI } from "./utils/openai.ts";
-import { generateSEOSuggestions } from "./modules/suggestion-generator.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,15 +22,21 @@ serve(async (req) => {
       throw new Error('Valid URL is required');
     }
 
+    // Check if OpenAI API key is configured
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openAIApiKey) {
+      logger.error('OpenAI API key is not configured');
+      throw new Error('OpenAI API key is not configured');
+    }
+
     // Extract content
     const { title, content } = await fetchAndExtractContent(url);
     logger.info('Content extracted, length:', content.length);
 
     // Initialize Supabase client
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Get existing pages from database
     const { data: existingPages, error: pagesError } = await supabase
@@ -44,35 +49,44 @@ serve(async (req) => {
       throw pagesError;
     }
 
-    logger.info(`Found ${existingPages?.length || 0} existing pages to consider for linking`);
-
     // Analyze with OpenAI
-    const analysis = await analyzeWithOpenAI(content);
-    logger.info('OpenAI analysis complete');
+    try {
+      const analysis = await analyzeWithOpenAI(content);
+      logger.info('OpenAI analysis complete');
 
-    // Generate link suggestions
-    const suggestions = await generateSEOSuggestions(
-      analysis.keywords.exact_match,
-      content,
-      existingPages || []
-    );
+      // Store analysis results
+      const { error: analysisError } = await supabase
+        .from('page_analysis')
+        .upsert({
+          url,
+          title,
+          content,
+          seo_keywords: analysis.keywords,
+          suggestions: analysis.outboundSuggestions
+        });
 
-    logger.info(`Generated ${suggestions.length} link suggestions`);
+      if (analysisError) {
+        logger.error('Error storing analysis:', analysisError);
+        throw analysisError;
+      }
 
-    const finalAnalysis = {
-      keywords: analysis.keywords,
-      outboundSuggestions: suggestions
-    };
+      return new Response(
+        JSON.stringify(analysis),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
 
-    return new Response(
-      JSON.stringify(finalAnalysis),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    } catch (openAIError) {
+      logger.error('OpenAI analysis failed:', openAIError);
+      throw new Error(`OpenAI analysis failed: ${openAIError.message}`);
+    }
 
   } catch (error) {
     logger.error('Error in analysis:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: error.response ? await error.response.text() : undefined
+      }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
