@@ -20,7 +20,7 @@ export async function extractKeywords(content: string, themes: string[]): Promis
             role: 'system',
             content: `You are an SEO expert. Extract ONLY 2-3 word phrases that exist EXACTLY in the content and could be used as anchor text for internal linking.
                      The content themes are: ${themes.join(', ')}.
-                     Return ONLY a JSON array of strings, no other text or formatting.
+                     Return ONLY phrases that exist VERBATIM in the content as a JSON array of strings.
                      Rules:
                      1. ONLY return phrases that exist VERBATIM in the content
                      2. Each phrase must be 2-3 words
@@ -40,20 +40,22 @@ export async function extractKeywords(content: string, themes: string[]): Promis
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content.trim();
+    const responseContent = data.choices[0].message.content.trim();
     
-    // Remove any markdown formatting or extra text
-    const cleanContent = content.replace(/```json\n|\n```|```/g, '').trim();
+    // Clean the response content by removing any markdown formatting
+    const cleanContent = responseContent.replace(/```json\n|\n```|```/g, '').trim();
     
     let phrases: string[];
     try {
       phrases = JSON.parse(cleanContent);
       if (!Array.isArray(phrases)) {
+        logger.error('OpenAI response is not an array:', cleanContent);
         throw new Error('Phrases must be an array');
       }
     } catch (e) {
       logger.error('Error parsing phrases:', e);
-      phrases = [];
+      logger.error('Raw content:', cleanContent);
+      return [];
     }
 
     // Verify each phrase exists in content
@@ -62,6 +64,9 @@ export async function extractKeywords(content: string, themes: string[]): Promis
       const context = findExactPhraseContext(content, phrase);
       if (context) {
         verifiedPhrases.push(phrase);
+        logger.info(`Verified phrase: "${phrase}" with context: ${context}`);
+      } else {
+        logger.warn(`Phrase not found in content: ${phrase}`);
       }
     }
 
