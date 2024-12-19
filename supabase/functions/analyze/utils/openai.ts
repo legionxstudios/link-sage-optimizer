@@ -5,6 +5,7 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
   try {
     if (!OPENAI_API_KEY) {
+      logger.error('OpenAI API key is not configured');
       throw new Error('OpenAI API key is not configured');
     }
 
@@ -23,7 +24,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
