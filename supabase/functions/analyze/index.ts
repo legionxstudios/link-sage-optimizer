@@ -37,19 +37,32 @@ serve(async (req) => {
     const { title, content } = await extractContent(url);
     logger.info('Content extracted successfully', { title });
 
-    // Get existing pages from the same website
+    // Get or create website record
     const domain = new URL(url).hostname;
-    const { data: website } = await supabase
+    const { data: websiteData, error: websiteError } = await supabase
       .from('websites')
       .upsert({ domain })
       .select()
       .single();
 
-    const { data: existingPages } = await supabase
+    if (websiteError || !websiteData) {
+      logger.error('Error upserting website:', websiteError);
+      throw new Error('Failed to create/update website record');
+    }
+
+    logger.info('Website record:', websiteData);
+
+    // Get existing pages from the same website
+    const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
-      .eq('website_id', website.id)
+      .eq('website_id', websiteData.id)
       .neq('url', url);
+
+    if (pagesError) {
+      logger.error('Error fetching existing pages:', pagesError);
+      throw new Error('Failed to fetch existing pages');
+    }
 
     // Analyze with OpenAI
     const analysis = await analyzeWithOpenAI(content, existingPages || []);
@@ -71,8 +84,11 @@ serve(async (req) => {
       });
 
     if (analysisError) {
+      logger.error('Error storing analysis:', analysisError);
       throw analysisError;
     }
+
+    logger.info('Analysis results stored successfully');
 
     return new Response(
       JSON.stringify(analysis),
