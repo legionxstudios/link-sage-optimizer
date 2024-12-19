@@ -1,6 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { parse } from "https://deno.land/x/xml@2.1.1/mod.ts";
 import { logger } from "./utils/logger.ts";
 
 const corsHeaders = {
@@ -8,115 +6,65 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
-
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    logger.info('Starting sitemap processing');
     const { url } = await req.json();
     
     if (!url) {
+      logger.error('No URL provided');
       throw new Error('URL is required');
     }
 
     logger.info(`Processing sitemap for URL: ${url}`);
-    
-    // Extract domain from URL
-    const domain = new URL(url).hostname;
-    
-    // Get or create website record using upsert
-    const { data: website, error: websiteError } = await supabase
-      .from('websites')
-      .upsert({ 
-        domain,
-        last_crawled_at: new Date().toISOString()
-      }, {
-        onConflict: 'domain',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
-
-    if (websiteError) {
-      logger.error('Error upserting website:', websiteError);
-      throw websiteError;
-    }
-
-    logger.info(`Website record created/updated for domain: ${domain}`);
 
     // Fetch the sitemap
     const response = await fetch(url);
     if (!response.ok) {
+      logger.error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
       throw new Error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
     }
 
     const sitemapText = await response.text();
     logger.info(`Sitemap content length: ${sitemapText.length}`);
 
-    // Parse XML using Deno's XML parser
-    const xmlDoc = parse(sitemapText);
-    const urls = xmlDoc.urlset?.url ?? [];
-    const processedUrls = [];
-
-    logger.info(`Found ${urls.length} URLs in sitemap`);
+    // Parse the XML
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(sitemapText, "text/xml");
     
-    for (const urlElement of urls) {
-      const loc = urlElement.loc?.[0];
-      const lastmod = urlElement.lastmod?.[0];
-      
-      if (!loc) {
-        logger.warn('Skipping URL element without location');
-        continue;
-      }
-
-      try {
-        // Store page in database using upsert
-        const { data: page, error: pageError } = await supabase
-          .from('pages')
-          .upsert({
-            website_id: website.id,
-            url: loc,
-            last_crawled_at: lastmod || new Date().toISOString()
-          }, {
-            onConflict: 'url',
-            ignoreDuplicates: false
-          })
-          .select()
-          .single();
-
-        if (pageError) {
-          logger.error(`Error upserting page ${loc}:`, pageError);
-          continue;
-        }
-
-        processedUrls.push({
-          url: loc,
-          lastModified: lastmod
-        });
-
-        logger.info(`Successfully processed URL: ${loc}`);
-
-      } catch (error) {
-        logger.error(`Error processing URL ${loc}:`, error);
-        continue;
-      }
+    if (!xmlDoc) {
+      logger.error('Failed to parse sitemap XML');
+      throw new Error('Failed to parse sitemap XML');
     }
 
-    logger.info(`Successfully processed ${processedUrls.length} URLs`);
+    // Extract URLs
+    const urls = Array.from(xmlDoc.getElementsByTagName('url'))
+      .map(urlElement => {
+        const loc = urlElement.getElementsByTagName('loc')[0]?.textContent;
+        const lastmod = urlElement.getElementsByTagName('lastmod')[0]?.textContent;
+        return { url: loc, lastModified: lastmod };
+      })
+      .filter(entry => entry.url);
+
+    logger.info(`Found ${urls.length} URLs in sitemap`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Processed ${processedUrls.length} URLs from sitemap`,
-        urls: processedUrls 
+        message: `Processed ${urls.length} URLs from sitemap`,
+        urls: urls 
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
     );
 
   } catch (error) {
