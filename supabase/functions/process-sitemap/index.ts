@@ -6,7 +6,6 @@ import { corsHeaders } from "./utils/cors.ts";
 console.log("Process sitemap function started");
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -14,13 +13,18 @@ serve(async (req) => {
   try {
     if (req.method !== 'POST') {
       return new Response(
-        JSON.stringify({ error: 'Method not allowed' }),
-        { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          error: 'Method not allowed' 
+        }),
+        { 
+          status: 405, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       );
     }
 
     // Get and validate the request body
-    const requestData = await req.json().catch(() => null);
+    const requestData = await req.json();
     console.log('Received request data:', requestData);
 
     if (!requestData || !requestData.url) {
@@ -72,7 +76,6 @@ serve(async (req) => {
       );
     }
 
-    // Process URLs in database
     const domain = new URL(url).hostname;
     console.log('Processing URLs for domain:', domain);
     const processedUrls = await processUrlsInDatabase(domain, urls);

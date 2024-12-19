@@ -20,7 +20,7 @@ export interface AnalysisResponse {
 }
 
 const MAX_RETRIES = 3;
-const INITIAL_RETRY_DELAY = 1000; // 1 second
+const INITIAL_RETRY_DELAY = 1000;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -39,7 +39,7 @@ const retryWithBackoff = async <T>(
       throw error;
     }
     
-    const nextDelay = delay * 2; // Exponential backoff
+    const nextDelay = delay * 2;
     console.log(`Retrying operation in ${delay}ms, ${retries} attempts remaining`);
     await sleep(delay);
     return retryWithBackoff(operation, retries - 1, nextDelay);
@@ -51,6 +51,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     throw new Error("URL is required");
   }
 
+  try {
+    new URL(url);
+  } catch (error) {
+    throw new Error("Invalid URL format");
+  }
+
   console.log("Starting page analysis for:", url);
   
   try {
@@ -58,14 +64,11 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Processing sitemap for URL:", url);
     
     const requestBody = { url };
-    console.log("Request body:", JSON.stringify(requestBody));
+    console.log("Sitemap request body:", requestBody);
     
     const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
       supabase.functions.invoke('process-sitemap', {
-        body: requestBody,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        body: requestBody
       })
     );
 
@@ -75,7 +78,6 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       throw sitemapError;
     }
 
-    // Log the raw sitemap response for debugging
     console.log("Raw sitemap response:", sitemapData);
 
     if (!sitemapData?.success) {
@@ -92,15 +94,9 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     // Then analyze the page
     console.log("Invoking analyze function with URL:", url);
     
-    const analysisRequestBody = { url };
-    console.log("Analysis request body:", JSON.stringify(analysisRequestBody));
-    
     const { data: analysisData, error: analysisError } = await retryWithBackoff(() =>
       supabase.functions.invoke('analyze', {
-        body: analysisRequestBody,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        body: { url }
       })
     );
 
@@ -118,14 +114,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       throw new Error("No analysis data received from server");
     }
 
-    // Ensure we have a valid keywords structure
     const keywords = analysisData.keywords || { 
       exact_match: [], 
       broad_match: [], 
       related_match: [] 
     };
 
-    // Ensure we have valid suggestions
     const suggestions = (analysisData.outboundSuggestions || []).map((suggestion: any) => ({
       suggestedAnchorText: suggestion.suggestedAnchorText || "",
       context: suggestion.context || "",
