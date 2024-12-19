@@ -23,7 +23,6 @@ serve(async (req) => {
       );
     }
 
-    // Get and validate the request body
     const requestData = await req.json();
     console.log('Received request data:', requestData);
 
@@ -60,8 +59,8 @@ serve(async (req) => {
     }
 
     console.log('Starting sitemap fetch and parse for:', url);
-    const urls = await fetchAndParseSitemap(url);
-    console.log(`Successfully found ${urls.length} URLs in sitemap or page`);
+    const { urls, source } = await fetchAndParseSitemap(url);
+    console.log(`Successfully found ${urls.length} URLs from ${source}`);
 
     if (urls.length === 0) {
       return new Response(
@@ -83,8 +82,9 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Processed ${processedUrls.length} URLs from sitemap or page content`,
-        urls: processedUrls 
+        message: `Processed ${processedUrls.length} URLs from ${source}`,
+        urls: processedUrls,
+        source
       }),
       { 
         status: 200, 
