@@ -9,7 +9,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
       throw new Error('OpenAI API key is not configured');
     }
 
-    logger.info('Analyzing content with OpenAI...');
+    logger.info('Starting OpenAI analysis...');
     
     // Truncate content to avoid token limits
     const truncatedContent = content.substring(0, 3000);
@@ -21,7 +21,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
       summary: page.content?.substring(0, 200) || ''
     }));
 
-    logger.info('Sending request to OpenAI API');
+    logger.info('Sending request to OpenAI API with content length:', truncatedContent.length);
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -33,8 +33,8 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
         messages: [
           {
             role: 'system',
-            content: `You are an SEO expert. Analyze the content and suggest relevant internal linking opportunities. 
-            Format your response as valid JSON with this exact structure:
+            content: `You are an SEO expert. Your task is to analyze content and suggest internal linking opportunities.
+            You must respond with a valid JSON object using this exact structure, with no additional text or explanation:
             {
               "keywords": {
                 "exact_match": ["keyword1", "keyword2"],
@@ -45,7 +45,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
                 {
                   "suggestedAnchorText": "text",
                   "targetUrl": "url",
-                  "context": "context",
+                  "context": "text around the suggested link",
                   "relevanceScore": 0.8
                 }
               ]
@@ -53,7 +53,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
           },
           {
             role: 'user',
-            content: `Analyze this content and suggest links to these existing pages:\n\nContent: ${truncatedContent}\n\nAvailable pages: ${JSON.stringify(pagesContext)}`
+            content: `Analyze this content and suggest relevant internal links. Return ONLY a JSON object matching the specified structure.\n\nContent: ${truncatedContent}\n\nAvailable pages: ${JSON.stringify(pagesContext)}`
           }
         ],
         temperature: 0.3,
@@ -75,32 +75,41 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
       throw new Error('Invalid OpenAI response format');
     }
 
-    // Parse the response with better error handling
     try {
       const content = data.choices[0].message.content.trim();
       logger.debug('Attempting to parse content:', content);
       
       const parsedResponse = JSON.parse(content);
       
-      // Validate the parsed response structure
+      // Validate response structure
       if (!parsedResponse.keywords || !parsedResponse.outboundSuggestions) {
-        logger.error('Parsed response missing required fields:', parsedResponse);
-        throw new Error('Invalid response structure');
+        logger.error('Invalid response structure:', parsedResponse);
+        throw new Error('Response missing required fields');
       }
 
-      logger.info('Successfully parsed OpenAI response');
-      return {
+      // Ensure arrays exist and are valid
+      const validResponse = {
         keywords: {
           exact_match: Array.isArray(parsedResponse.keywords.exact_match) ? parsedResponse.keywords.exact_match : [],
           broad_match: Array.isArray(parsedResponse.keywords.broad_match) ? parsedResponse.keywords.broad_match : [],
           related_match: Array.isArray(parsedResponse.keywords.related_match) ? parsedResponse.keywords.related_match : []
         },
-        outboundSuggestions: Array.isArray(parsedResponse.outboundSuggestions) ? parsedResponse.outboundSuggestions : []
+        outboundSuggestions: Array.isArray(parsedResponse.outboundSuggestions) 
+          ? parsedResponse.outboundSuggestions.map(suggestion => ({
+              suggestedAnchorText: String(suggestion.suggestedAnchorText || ''),
+              targetUrl: String(suggestion.targetUrl || ''),
+              context: String(suggestion.context || ''),
+              relevanceScore: Number(suggestion.relevanceScore) || 0
+            }))
+          : []
       };
+
+      logger.info('Successfully parsed and validated OpenAI response');
+      return validResponse;
 
     } catch (parseError) {
       logger.error('Error parsing OpenAI response:', parseError);
-      logger.error('Response content:', data.choices[0].message.content);
+      logger.error('Raw response content:', data.choices[0].message.content);
       throw new Error('Failed to parse OpenAI response as JSON');
     }
 
