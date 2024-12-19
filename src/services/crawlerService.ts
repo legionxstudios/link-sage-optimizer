@@ -52,9 +52,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   try {
     // First process the sitemap
     console.log("Processing sitemap for URL:", url);
+    const requestBody = { url };
+    console.log("Sending request body:", JSON.stringify(requestBody));
+
     const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
       supabase.functions.invoke('process-sitemap', {
-        body: JSON.stringify({ url }), // Ensure proper JSON stringification
+        body: { url }, // Let Supabase handle the JSON stringification
         headers: {
           'Content-Type': 'application/json'
         }
@@ -80,7 +83,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Invoking analyze function with URL:", url);
     const { data: analysisData, error: analysisError } = await retryWithBackoff(() =>
       supabase.functions.invoke('analyze', {
-        body: JSON.stringify({ url }), // Ensure proper JSON stringification
+        body: { url }, // Let Supabase handle the JSON stringification
         headers: {
           'Content-Type': 'application/json'
         }
