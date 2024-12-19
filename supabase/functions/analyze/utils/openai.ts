@@ -39,7 +39,8 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
             content: `You are an SEO expert analyzing content and suggesting internal links. 
             For each existing page provided, determine if it would make a good link target based on relevance.
             Consider semantic relevance, not just keyword matches.
-            Return suggestions as JSON array with fields: suggestedAnchorText, targetUrl, context, relevanceScore (0-1).`
+            Return ONLY a JSON array of suggestions, with no markdown formatting or additional text.
+            Each suggestion should have: suggestedAnchorText, targetUrl, context, relevanceScore (0-1).`
           },
           {
             role: 'user',
@@ -57,14 +58,20 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     }
 
     const suggestionsData = await suggestionsResponse.json();
-    logger.info('Raw OpenAI suggestions:', suggestionsData);
+    logger.info('Raw OpenAI suggestions response:', suggestionsData);
 
     let suggestions = [];
     try {
-      suggestions = JSON.parse(suggestionsData.choices[0].message.content);
+      // Clean the response content by removing any markdown formatting
+      const responseContent = suggestionsData.choices[0].message.content.trim();
+      const cleanContent = responseContent.replace(/```json\n|\n```|```/g, '').trim();
+      logger.info('Cleaned suggestions content:', cleanContent);
+      
+      suggestions = JSON.parse(cleanContent);
       logger.info(`Parsed ${suggestions.length} suggestions from OpenAI`);
     } catch (e) {
       logger.error('Error parsing OpenAI suggestions:', e);
+      logger.error('Raw content:', suggestionsData.choices[0].message.content);
     }
 
     // 4. Extract keywords that could link to related pages
@@ -83,7 +90,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
             - exact_match: Phrases that appear exactly in the content
             - broad_match: Related phrases that share keywords
             - related_match: Thematically related phrases
-            Return as JSON with these three arrays.`
+            Return ONLY a JSON object with these three arrays, no markdown formatting or additional text.`
           },
           {
             role: 'user',
@@ -99,7 +106,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     }
 
     const keywordsData = await keywordsResponse.json();
-    logger.info('Raw OpenAI keywords:', keywordsData);
+    logger.info('Raw OpenAI keywords response:', keywordsData);
 
     let keywords = {
       exact_match: [],
@@ -108,10 +115,15 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     };
 
     try {
-      keywords = JSON.parse(keywordsData.choices[0].message.content);
+      const responseContent = keywordsData.choices[0].message.content.trim();
+      const cleanContent = responseContent.replace(/```json\n|\n```|```/g, '').trim();
+      logger.info('Cleaned keywords content:', cleanContent);
+      
+      keywords = JSON.parse(cleanContent);
       logger.info('Parsed keywords:', keywords);
     } catch (e) {
       logger.error('Error parsing OpenAI keywords:', e);
+      logger.error('Raw content:', keywordsData.choices[0].message.content);
     }
 
     // 5. Validate and format suggestions
