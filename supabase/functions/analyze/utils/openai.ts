@@ -10,8 +10,9 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     }
 
     logger.info('Starting OpenAI analysis...');
-    logger.info(`Analyzing content with ${existingPages.length} existing pages`);
-    
+    logger.debug('Existing pages count:', existingPages.length);
+    logger.debug('First few existing pages:', existingPages.slice(0, 3));
+
     // First get keywords from the content
     const keywordsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -80,7 +81,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     });
 
     logger.info(`Found ${validPages.length} valid HTML pages for linking`);
-    logger.debug('Valid pages:', validPages);
+    logger.debug('Valid pages for linking:', validPages);
 
     // Generate semantically relevant link suggestions
     const suggestionsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -135,7 +136,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     try {
       const responseContent = suggestionsData.choices[0].message.content.trim();
       const cleanContent = responseContent.replace(/```json\n|\n```|```/g, '').trim();
-      logger.info('Cleaned suggestions content:', cleanContent);
+      logger.debug('Cleaned suggestions content:', cleanContent);
       
       suggestions = JSON.parse(cleanContent);
       logger.info(`Parsed ${suggestions.length} suggestions from OpenAI`);
