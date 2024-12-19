@@ -89,7 +89,7 @@ const Index = () => {
           </form>
         </Card>
 
-        {results && <AnalysisResults results={results} />}
+        <AnalysisResults results={results} />
       </motion.div>
     </div>
   );
