@@ -2,89 +2,72 @@ import logging
 import os
 import json
 import openai
-from typing import List
-from dotenv import load_dotenv
+from typing import List, Dict
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
-# Configure OpenAI client
-openai.api_key = os.getenv('OPENAI_API_KEY')
-
-async def analyze_content_with_openai(content: str) -> List[str]:
-    """Analyze content using OpenAI to extract key phrases."""
+async def analyze_content_with_openai(content: str) -> List[Dict]:
+    """Analyze content using OpenAI to generate suggestions."""
     try:
-        logger.info("Starting content analysis with OpenAI")
-        logger.info(f"Content length: {len(content)}")
+        logger.info("Starting OpenAI content analysis")
         
+        # Prepare system message with clear instructions
+        system_message = """You are an SEO expert. Analyze the content and suggest ONLY phrases that EXACTLY appear in the content for internal linking.
+        Important rules:
+        1. ONLY suggest anchor text that EXISTS VERBATIM in the content
+        2. Each suggestion must be a complete phrase (2-5 words)
+        3. Provide at least 15-20 suggestions if possible
+        4. Do not suggest single words
+        5. Verify each suggestion appears exactly as written in the content
+        """
+        
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4o",  # Using more capable model for better accuracy
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_message
+                },
+                {
+                    "role": "user",
+                    "content": f"Analyze this content and suggest ONLY phrases that appear EXACTLY in the content:\n\n{content[:4000]}"
+                }
+            ],
+            temperature=0.3,
+            max_tokens=1500
+        )
+        
+        if not response.choices:
+            logger.error("No choices in OpenAI response")
+            return []
+            
         try:
-            logger.info("Sending request to OpenAI")
-            response = await openai.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert at identifying key 2-3 word phrases for SEO interlinking. ONLY return phrases that are exactly 2-3 words long."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Extract 10 key phrases (EXACTLY 2-3 words each) that represent the main topics of the following content:\n\n{content[:2000]}\n\nEnsure each phrase is EXACTLY 2-3 words long."
-                    }
-                ],
-                functions=[{
-                    "name": "extract_key_phrases",
-                    "description": "Extract ONLY 2-3 word key phrases that represent the main topics from the content. Each phrase must be exactly 2-3 words long.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "key_phrases": {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                    "description": "A 2-3 word phrase representing a key topic"
-                                },
-                                "description": "List of 2-3 word key phrases extracted from the text."
-                            }
-                        },
-                        "required": ["key_phrases"]
-                    }
-                }],
-                function_call={"name": "extract_key_phrases"}
-            )
+            suggestions_text = response.choices[0].message.content
+            suggestions = []
             
-            logger.info("Received response from OpenAI")
-            logger.debug(f"OpenAI response: {response}")
-            
-            if not response.choices:
-                logger.error("No choices in OpenAI response")
-                return []
-                
-            try:
-                function_call = response.choices[0].message.function_call
-                if not function_call:
-                    logger.error("No function call in response")
-                    return []
+            # Parse the response and create suggestion objects
+            lines = suggestions_text.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith('#') or line.startswith('-'):
+                    continue
                     
-                arguments = json.loads(function_call.arguments)
-                key_phrases = arguments.get('key_phrases', [])
-                
-                # Validate phrase length
-                key_phrases = [
-                    phrase for phrase in key_phrases 
-                    if 2 <= len(phrase.split()) <= 3
-                ]
-                
-                logger.info(f"Extracted {len(key_phrases)} valid key phrases")
-                return key_phrases
-                
-            except Exception as e:
-                logger.error(f"Error parsing OpenAI response: {str(e)}")
-                return []
-                
+                # Create suggestion object
+                suggestion = {
+                    "suggestedAnchorText": line,
+                    "context": "",  # Will be filled by content validator
+                    "matchType": "keyword_based",
+                    "relevanceScore": 0.9  # Default score, will be adjusted
+                }
+                suggestions.append(suggestion)
+            
+            logger.info(f"Generated {len(suggestions)} initial suggestions")
+            return suggestions
+            
         except Exception as e:
-            logger.error(f"OpenAI API error: {str(e)}")
+            logger.error(f"Error parsing OpenAI response: {str(e)}")
             return []
             
     except Exception as e:
-        logger.error(f"Error in content analysis: {str(e)}", exc_info=True)
+        logger.error(f"Error in content analysis: {str(e)}")
         return []
