@@ -10,8 +10,23 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     }
 
     logger.info('Starting OpenAI analysis...');
-    logger.debug('Existing pages count:', existingPages.length);
-    logger.debug('First few existing pages:', existingPages.slice(0, 3));
+    
+    // Filter for blog content pages only
+    const blogPages = existingPages.filter(page => {
+      // Check if URL contains /blog/ and isn't the current page
+      return page.url.includes('/blog/') && 
+             // Exclude common non-content paths
+             !page.url.includes('/cart') &&
+             !page.url.includes('/checkout') &&
+             !page.url.includes('/my-account') &&
+             !page.url.includes('/wp-content') &&
+             // Ensure we have a title and content
+             page.title &&
+             page.content;
+    });
+
+    logger.info(`Found ${blogPages.length} relevant blog pages for linking`);
+    logger.debug('Blog pages:', blogPages.map(p => ({ url: p.url, title: p.title })));
 
     // First get keywords from the content
     const keywordsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -66,23 +81,6 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       logger.error('Raw content:', keywordsData.choices[0].message.content);
     }
 
-    // Filter existing pages to only include valid HTML pages
-    const validPages = existingPages.filter(page => {
-      if (!page.url || !isValidWebpageUrl(page.url)) {
-        logger.debug(`Filtered out invalid URL: ${page.url}`);
-        return false;
-      }
-      // Don't include the current page
-      if (page.url === content.url) {
-        logger.debug(`Filtered out self-reference: ${page.url}`);
-        return false;
-      }
-      return true;
-    });
-
-    logger.info(`Found ${validPages.length} valid HTML pages for linking`);
-    logger.debug('Valid pages for linking:', validPages);
-
     // Generate semantically relevant link suggestions
     const suggestionsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -97,7 +95,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
             role: 'system',
             content: `You are an SEO expert analyzing content and suggesting internal links. 
             Rules:
-            1. For each target page, identify its main topic/theme from its title and content
+            1. For each target page, identify its main topic/theme from its title
             2. Find keywords from the source content that BEST DESCRIBE the target page's topic
             3. Only use keywords that appear EXACTLY in the source content
             4. The anchor text should semantically match the target page's topic
@@ -105,7 +103,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
             6. Ensure strong topical relevance between source content and target page
             
             Example:
-            If target page is about "vintage photography guide", use anchor text like "vintage photography tips" or "classic photography techniques" that appears in source content, NOT product names like "Polaroid SX-70".
+            If target page is about "vintage photography guide", use anchor text like "vintage photography tips" that appears in source content, NOT product names like "Polaroid SX-70".
             
             Return ONLY a JSON array of suggestions with:
             - suggestedAnchorText: keyword from source that best describes target page's topic
@@ -117,7 +115,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
           {
             role: 'user',
             content: `Source content: ${content}\n\nAvailable keywords: ${JSON.stringify(keywords.exact_match)}\n\nTarget pages:\n${
-              validPages.map(page => `URL: ${page.url}\nTitle: ${page.title}\nContent: ${page.content?.substring(0, 500)}...\n---`).join('\n')
+              blogPages.map(page => `URL: ${page.url}\nTitle: ${page.title}\nContent: ${page.content?.substring(0, 500)}...\n---`).join('\n')
             }`
           }
         ],
@@ -155,9 +153,9 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
           return false;
         }
         
-        // Verify target URL
-        if (!suggestion.targetUrl || !isValidWebpageUrl(suggestion.targetUrl)) {
-          logger.warn(`Invalid URL in suggestion: ${suggestion.targetUrl}`);
+        // Verify target URL is a blog post
+        if (!suggestion.targetUrl?.includes('/blog/')) {
+          logger.warn(`Invalid URL in suggestion (not a blog post): ${suggestion.targetUrl}`);
           return false;
         }
 
