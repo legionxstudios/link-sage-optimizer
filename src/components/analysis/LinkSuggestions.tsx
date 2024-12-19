@@ -31,6 +31,8 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
         return <Badge variant="default">SEO Optimized</Badge>;
       case 'keyword_based':
         return <Badge variant="secondary">Keyword Based</Badge>;
+      case 'theme_based':
+        return <Badge variant="outline">Theme Based</Badge>;
       default:
         return <Badge variant="outline">{type}</Badge>;
     }

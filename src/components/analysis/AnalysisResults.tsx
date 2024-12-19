@@ -48,6 +48,13 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
   const { keywords, outboundSuggestions } = results;
 
+  // Helper function to clean and format keyword strings
+  const formatKeyword = (keyword: string): string => {
+    // Extract just the keyword part before the dash and context
+    const parts = keyword.split(' - ');
+    return parts[0].trim();
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -69,7 +76,7 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
                   <div className="flex flex-wrap gap-2">
                     {keywords.exact_match.map((keyword, index) => (
                       <Badge key={index} variant="default">
-                        {keyword}
+                        {formatKeyword(keyword)}
                       </Badge>
                     ))}
                   </div>
@@ -82,7 +89,7 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
                   <div className="flex flex-wrap gap-2">
                     {keywords.broad_match.map((keyword, index) => (
                       <Badge key={index} variant="secondary">
-                        {keyword}
+                        {formatKeyword(keyword)}
                       </Badge>
                     ))}
                   </div>
@@ -95,7 +102,7 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
                   <div className="flex flex-wrap gap-2">
                     {keywords.related_match.map((keyword, index) => (
                       <Badge key={index} variant="outline">
-                        {keyword}
+                        {formatKeyword(keyword)}
                       </Badge>
                     ))}
                   </div>
