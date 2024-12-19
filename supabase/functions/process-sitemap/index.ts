@@ -6,9 +6,12 @@ import { corsHeaders } from "./utils/cors.ts";
 console.log("Process sitemap function started");
 
 serve(async (req) => {
-  // Handle CORS
+  // Always handle CORS preflight first
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
   }
 
   try {

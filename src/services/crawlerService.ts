@@ -68,7 +68,10 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     
     const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
       supabase.functions.invoke('process-sitemap', {
-        body: requestBody
+        body: requestBody,
+        headers: {
+          'Content-Type': 'application/json'
+        }
       })
     );
 
@@ -99,6 +102,9 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
         body: { 
           url,
           crawlCompleted: true // Signal that crawling is done
+        },
+        headers: {
+          'Content-Type': 'application/json'
         }
       })
     );
