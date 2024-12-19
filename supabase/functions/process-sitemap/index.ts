@@ -13,7 +13,7 @@ serve(async (req) => {
     let requestBody;
     try {
       const text = await req.text();
-      console.log('Raw request body:', text); // Log raw request body
+      console.log('Raw request body:', text);
       
       if (!text) {
         return createErrorResponse('Request body is empty');
@@ -44,6 +44,10 @@ serve(async (req) => {
       // Fetch and parse sitemap
       const urls = await fetchAndParseSitemap(url);
       console.log(`Found ${urls.length} URLs in sitemap`);
+
+      if (urls.length === 0) {
+        return createErrorResponse('No URLs found in sitemap');
+      }
 
       // Process URLs in database
       const domain = new URL(url).hostname;

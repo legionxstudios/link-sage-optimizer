@@ -1,5 +1,3 @@
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
-
 export interface SitemapUrl {
   url: string;
   lastModified: string | null;
@@ -12,7 +10,7 @@ export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> =
   const response = await fetch(sitemapUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)',
-      'Accept': 'text/xml, application/xml'
+      'Accept': 'application/xml, text/xml'
     }
   });
 
@@ -23,20 +21,26 @@ export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> =
   const xmlText = await response.text();
   console.log('Received XML content length:', xmlText.length);
 
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
-  
-  if (!xmlDoc) {
-    throw new Error('Failed to parse sitemap XML');
+  // Simple regex-based XML parsing since we only need specific tags
+  const urls: SitemapUrl[] = [];
+  const urlRegex = /<url>([\s\S]*?)<\/url>/g;
+  const locRegex = /<loc>(.*?)<\/loc>/;
+  const lastmodRegex = /<lastmod>(.*?)<\/lastmod>/;
+
+  let match;
+  while ((match = urlRegex.exec(xmlText)) !== null) {
+    const urlBlock = match[1];
+    const locMatch = urlBlock.match(locRegex);
+    const lastmodMatch = urlBlock.match(lastmodRegex);
+
+    if (locMatch) {
+      urls.push({
+        url: locMatch[1].trim(),
+        lastModified: lastmodMatch ? lastmodMatch[1].trim() : null
+      });
+    }
   }
 
-  const urlElements = xmlDoc.getElementsByTagName('url');
-  return Array.from(urlElements).map(urlElement => {
-    const locElement = urlElement.getElementsByTagName('loc')[0];
-    const lastmodElement = urlElement.getElementsByTagName('lastmod')[0];
-    return {
-      url: locElement?.textContent || '',
-      lastModified: lastmodElement?.textContent || null
-    };
-  }).filter(entry => entry.url);
+  console.log(`Found ${urls.length} URLs in sitemap`);
+  return urls;
 };
