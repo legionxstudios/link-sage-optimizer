@@ -23,26 +23,38 @@ export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities from the provided list of pages. Return a JSON object with:
-            1. keywords categorized into arrays (exact_match, broad_match, related_match)
-            2. outboundSuggestions array with specific anchor text and target URLs from the provided pages list.
-            Each suggestion should include suggestedAnchorText, targetUrl, context, and relevanceScore.`
+            content: `You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities from the provided list of pages. 
+            Return your response in this exact JSON format:
+            {
+              "keywords": {
+                "exact_match": ["keyword1", "keyword2"],
+                "broad_match": ["keyword3", "keyword4"],
+                "related_match": ["keyword5", "keyword6"]
+              },
+              "outboundSuggestions": [
+                {
+                  "suggestedAnchorText": "text",
+                  "targetUrl": "url",
+                  "context": "context",
+                  "relevanceScore": 0.8
+                }
+              ]
+            }`
           },
           {
             role: 'user',
             content: `Analyze this content and suggest links to these existing pages:\n\nContent: ${truncatedContent}\n\nAvailable pages: ${JSON.stringify(pagesContext)}`
           }
         ],
-        temperature: 0.3,
-        response_format: { type: "json_object" }
+        temperature: 0.3
       }),
     });
 
