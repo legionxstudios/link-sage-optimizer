@@ -6,11 +6,13 @@ import { corsHeaders } from "./utils/cors.ts";
 console.log("Process sitemap function started");
 
 serve(async (req) => {
+  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Validate request method
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ 
@@ -23,11 +25,26 @@ serve(async (req) => {
       );
     }
 
-    const requestData = await req.json();
+    // Parse and validate request body
+    let requestData;
+    try {
+      requestData = await req.json();
+    } catch (error) {
+      console.error('Error parsing request body:', error);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid JSON in request body' 
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     console.log('Received request data:', requestData);
 
-    if (!requestData || !requestData.url) {
-      console.error('Invalid or empty request body received');
+    if (!requestData?.url) {
       return new Response(
         JSON.stringify({ 
           error: 'Invalid request body', 
@@ -42,6 +59,7 @@ serve(async (req) => {
 
     const { url } = requestData;
 
+    // Validate URL format
     try {
       new URL(url);
     } catch (e) {
