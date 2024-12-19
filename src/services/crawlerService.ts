@@ -54,7 +54,10 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Processing sitemap for URL:", url);
     const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
       supabase.functions.invoke('process-sitemap', {
-        body: { url }
+        body: { url },
+        headers: {
+          'Content-Type': 'application/json'
+        }
       })
     );
 
