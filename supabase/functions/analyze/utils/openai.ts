@@ -2,7 +2,7 @@ import { logger } from "./logger.ts";
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
-export async function analyzeWithOpenAI(content: string) {
+export async function analyzeWithOpenAI(content: string, existingPages: any[]) {
   try {
     if (!OPENAI_API_KEY) {
       throw new Error('OpenAI API key is not configured');
@@ -13,6 +13,13 @@ export async function analyzeWithOpenAI(content: string) {
     // Truncate content to avoid token limits
     const truncatedContent = content.substring(0, 3000);
     
+    // Create context about existing pages for OpenAI
+    const pagesContext = existingPages.map(page => ({
+      url: page.url,
+      title: page.title || '',
+      summary: page.content?.substring(0, 200) || ''
+    }));
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -20,15 +27,18 @@ export async function analyzeWithOpenAI(content: string) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4',
         messages: [
           {
             role: 'system',
-            content: 'You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities. Return a JSON object with keywords categorized into arrays (exact_match, broad_match, related_match) and outboundSuggestions array. Do not include any markdown formatting in your response.'
+            content: `You are an SEO expert. Extract keywords and suggest relevant internal linking opportunities from the provided list of pages. Return a JSON object with:
+            1. keywords categorized into arrays (exact_match, broad_match, related_match)
+            2. outboundSuggestions array with specific anchor text and target URLs from the provided pages list.
+            Each suggestion should include suggestedAnchorText, targetUrl, context, and relevanceScore.`
           },
           {
             role: 'user',
-            content: `Analyze this content and return a clean JSON object with keywords and linking suggestions:\n\n${truncatedContent}`
+            content: `Analyze this content and suggest links to these existing pages:\n\nContent: ${truncatedContent}\n\nAvailable pages: ${JSON.stringify(pagesContext)}`
           }
         ],
         temperature: 0.3,
@@ -50,12 +60,10 @@ export async function analyzeWithOpenAI(content: string) {
       throw new Error('Invalid OpenAI response format');
     }
 
-    // Parse the response, ensuring it's clean JSON
+    // Parse the response
     let parsedResponse;
     try {
-      // Remove any potential markdown formatting
-      const cleanContent = data.choices[0].message.content.replace(/```json\n|\n```/g, '');
-      parsedResponse = JSON.parse(cleanContent);
+      parsedResponse = JSON.parse(data.choices[0].message.content);
     } catch (parseError) {
       logger.error('Error parsing OpenAI response:', parseError);
       throw new Error('Failed to parse OpenAI response as JSON');

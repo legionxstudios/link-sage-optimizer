@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logger } from "./utils/logger.ts";
-import { fetchAndExtractContent } from "./utils/content-extractor.ts";
 import { analyzeWithOpenAI } from "./utils/openai.ts";
 
 const corsHeaders = {
@@ -29,19 +28,31 @@ serve(async (req) => {
       throw new Error('OpenAI API key is not configured');
     }
 
-    // Extract content
-    const { title, content } = await fetchAndExtractContent(url);
-    logger.info('Content extracted, length:', content.length);
-
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get existing pages from database
+    // Get website domain
+    const domain = new URL(url).hostname;
+
+    // Get website ID
+    const { data: website, error: websiteError } = await supabase
+      .from('websites')
+      .select('id')
+      .eq('domain', domain)
+      .single();
+
+    if (websiteError) {
+      logger.error('Error fetching website:', websiteError);
+      throw websiteError;
+    }
+
+    // Get existing pages from the same website
     const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
+      .eq('website_id', website.id)
       .neq('url', url);
 
     if (pagesError) {
@@ -49,9 +60,21 @@ serve(async (req) => {
       throw pagesError;
     }
 
+    // Fetch current page content
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch page: ${response.status}`);
+    }
+    const html = await response.text();
+    
+    // Extract title and content (simplified for example)
+    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+    const title = titleMatch ? titleMatch[1] : '';
+    const content = html.replace(/<[^>]*>/g, ' ').trim();
+
     // Analyze with OpenAI
     try {
-      const analysis = await analyzeWithOpenAI(content);
+      const analysis = await analyzeWithOpenAI(content, existingPages);
       logger.info('OpenAI analysis complete');
 
       // Store analysis results using upsert

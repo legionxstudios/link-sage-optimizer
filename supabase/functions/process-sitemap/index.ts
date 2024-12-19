@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { logger } from "./utils/logger.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,14 +40,22 @@ serve(async (req) => {
     const sitemapText = await response.text();
     logger.info(`Sitemap content length: ${sitemapText.length}`);
 
-    // Simple XML parsing using regex
-    const urlRegex = /<loc>(.*?)<\/loc>/g;
-    const urls = Array.from(sitemapText.matchAll(urlRegex))
-      .map(match => ({
-        url: match[1],
-        lastModified: null
-      }))
-      .filter(entry => entry.url);
+    // Parse XML using DOMParser
+    const doc = new DOMParser().parseFromString(sitemapText, 'text/xml');
+    if (!doc) {
+      throw new Error('Failed to parse sitemap XML');
+    }
+
+    // Extract URLs from <url><loc> tags
+    const urlElements = doc.getElementsByTagName('url');
+    const urls = Array.from(urlElements).map(urlElement => {
+      const locElement = urlElement.getElementsByTagName('loc')[0];
+      const lastmodElement = urlElement.getElementsByTagName('lastmod')[0];
+      return {
+        url: locElement?.textContent || '',
+        lastModified: lastmodElement?.textContent || null
+      };
+    }).filter(entry => entry.url);
 
     logger.info(`Found ${urls.length} URLs in sitemap`);
 
@@ -61,7 +70,7 @@ serve(async (req) => {
     logger.info('Processing domain:', domain);
 
     try {
-      // Use upsert instead of insert for the website
+      // Use upsert for the website
       const { data: website, error: websiteError } = await supabase
         .from('websites')
         .upsert(
@@ -71,7 +80,7 @@ serve(async (req) => {
           },
           {
             onConflict: 'domain',
-            ignoreDuplicates: false // This will update existing records
+            ignoreDuplicates: false
           }
         )
         .select()
@@ -93,10 +102,10 @@ serve(async (req) => {
             .upsert({
               website_id: website.id,
               url: pageUrl.url,
-              last_crawled_at: null // Set to null so crawler will pick it up
+              last_crawled_at: null
             }, {
               onConflict: 'url',
-              ignoreDuplicates: false // This will update existing records
+              ignoreDuplicates: false
             });
 
           if (pageError) {
