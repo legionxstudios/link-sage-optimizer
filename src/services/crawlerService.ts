@@ -71,13 +71,16 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Invoking analyze function with URL:", url);
     const { data: analysisData, error: analysisError } = await retryWithBackoff(() =>
       supabase.functions.invoke('analyze', {
-        body: { url }
+        body: { url },
+        headers: {
+          'Content-Type': 'application/json'
+        }
       })
     );
 
     if (analysisError) {
       console.error("Analysis error:", analysisError);
-      toast.error(analysisError.message);
+      toast.error("Failed to analyze page");
       throw analysisError;
     }
 

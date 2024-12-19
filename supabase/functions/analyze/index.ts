@@ -9,6 +9,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 serve(async (req) => {
@@ -40,6 +41,7 @@ serve(async (req) => {
     let retries = 3;
     while (retries > 0) {
       try {
+        logger.info(`Attempting to fetch URL (${4-retries}/3):`, url);
         response = await fetch(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)',
@@ -49,16 +51,19 @@ serve(async (req) => {
           redirect: 'follow',
         });
         
-        if (response.ok) break;
+        if (response.ok) {
+          logger.info('Successfully fetched URL');
+          break;
+        }
         
-        logger.warn(`Fetch attempt failed with status ${response.status}, retries left: ${retries}`);
+        logger.warn(`Fetch attempt failed with status ${response.status}, retries left: ${retries-1}`);
         retries--;
-        if (retries > 0) await new Promise(r => setTimeout(r, 1000));
+        if (retries > 0) await new Promise(r => setTimeout(r, 1000 * (4-retries)));
       } catch (error) {
         logger.error(`Fetch attempt failed (${retries} retries left):`, error);
         retries--;
         if (retries === 0) throw error;
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 1000 * (4-retries)));
       }
     }
 
@@ -123,7 +128,12 @@ serve(async (req) => {
     logger.info('Analysis completed successfully');
     return new Response(
       JSON.stringify(analysis),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
     );
 
   } catch (error) {
