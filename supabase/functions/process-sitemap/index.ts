@@ -56,13 +56,13 @@ serve(async (req) => {
 
     console.log('Starting sitemap fetch and parse for:', url);
     const urls = await fetchAndParseSitemap(url);
-    console.log(`Successfully found ${urls.length} URLs in sitemap`);
+    console.log(`Successfully found ${urls.length} URLs in sitemap or page`);
 
     if (urls.length === 0) {
       return new Response(
         JSON.stringify({ 
-          error: 'No URLs found in sitemap',
-          details: 'The sitemap was processed successfully but no valid URLs were found.'
+          error: 'No URLs found',
+          details: 'Could not find any valid URLs in the sitemap or page content.'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -76,7 +76,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Processed ${processedUrls.length} URLs from sitemap`,
+        message: `Processed ${processedUrls.length} URLs from sitemap or page content`,
         urls: processedUrls 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
