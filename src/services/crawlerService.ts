@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 export interface LinkSuggestion {
   suggestedAnchorText: string;
@@ -23,6 +23,21 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
+    // First process the sitemap
+    console.log("Processing sitemap for URL:", url);
+    const { data: sitemapData, error: sitemapError } = await supabase.functions.invoke('process-sitemap', {
+      body: { url }
+    });
+
+    if (sitemapError) {
+      console.error("Sitemap processing error:", sitemapError);
+      toast.error("Failed to process sitemap");
+    } else {
+      console.log("Sitemap processing result:", sitemapData);
+      toast.success(`Found ${sitemapData?.urls?.length || 0} pages in sitemap`);
+    }
+
+    // Then analyze the page
     console.log("Invoking analyze function with URL:", url);
     const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze', {
       body: { url }
@@ -33,7 +48,6 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       toast({
         title: "Analysis Error",
         description: analysisError.message,
-        variant: "destructive"
       });
       throw new Error(analysisError.message);
     }
@@ -42,11 +56,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     if (!analysisData) {
       console.error("No analysis data received");
-      toast({
-        title: "Analysis Error",
-        description: "No analysis data received from server",
-        variant: "destructive"
-      });
+      toast.error("No analysis data received from server");
       throw new Error("No analysis data received from server");
     }
 
@@ -57,7 +67,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       related_match: [] 
     };
 
-    // Ensure we have valid suggestions with target URLs
+    // Ensure we have valid suggestions
     const suggestions = (analysisData.outboundSuggestions || []).map((suggestion: any) => ({
       suggestedAnchorText: suggestion.suggestedAnchorText || "",
       context: suggestion.context || "",
@@ -70,10 +80,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Processed keywords:", keywords);
     console.log("Processed suggestions:", suggestions);
 
-    toast({
-      title: "Analysis Complete",
-      description: `Found ${keywords.exact_match.length} primary keywords and ${suggestions.length} link suggestions`,
-    });
+    toast.success("Analysis complete!");
 
     return {
       keywords,
@@ -82,11 +89,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
   } catch (error) {
     console.error("Error in page analysis:", error);
-    toast({
-      title: "Analysis Failed",
-      description: error instanceof Error ? error.message : "Unknown error occurred",
-      variant: "destructive"
-    });
+    toast.error(error instanceof Error ? error.message : "Unknown error occurred");
     throw error;
   }
 };
