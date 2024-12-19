@@ -3,7 +3,7 @@ export interface SitemapUrl {
   lastModified: string | null;
 }
 
-export const fetchAndParseSitemap = async (url: string): Promise<SitemapUrl[]> {
+export const fetchAndParseSitemap = async (url: string) => {
   console.log('Starting sitemap processing for URL:', url);
   
   // Try to determine the sitemap URL
