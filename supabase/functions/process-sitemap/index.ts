@@ -31,12 +31,21 @@ serve(async (req) => {
     // Parse and validate request body
     let requestData;
     try {
-      requestData = await req.json();
+      const bodyText = await req.text();
+      console.log('Raw request body:', bodyText);
+      
+      if (!bodyText) {
+        throw new Error('Empty request body');
+      }
+      
+      requestData = JSON.parse(bodyText);
+      console.log('Parsed request data:', requestData);
     } catch (error) {
       console.error('Error parsing request body:', error);
       return new Response(
         JSON.stringify({ 
-          error: 'Invalid JSON in request body' 
+          error: 'Invalid JSON in request body',
+          details: error.message 
         }),
         { 
           status: 400, 
@@ -44,8 +53,6 @@ serve(async (req) => {
         }
       );
     }
-
-    console.log('Received request data:', requestData);
 
     if (!requestData?.url) {
       return new Response(
