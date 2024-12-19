@@ -19,7 +19,7 @@ export async function analyzeWithOpenAI(
     const keywords = await extractKeywords(content);
     logger.info('Extracted keywords:', keywords);
 
-    // Generate link suggestions based on keywords
+    // Generate link suggestions based on keywords and existing pages
     const suggestions = generateSuggestions(keywords, existingPages);
     logger.info(`Generated ${suggestions.length} suggestions`);
     
@@ -42,7 +42,7 @@ async function extractKeywords(content: string) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',

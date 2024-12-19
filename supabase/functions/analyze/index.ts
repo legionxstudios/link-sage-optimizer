@@ -22,20 +22,6 @@ serve(async (req) => {
       throw new Error('URL is required');
     }
 
-    // Wait for crawling to be completed
-    if (!crawlCompleted) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Crawling not completed',
-          details: 'Please wait for crawling to complete before analysis'
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -65,6 +51,7 @@ serve(async (req) => {
       throw new Error(`Database error: ${websiteError.message}`);
     }
 
+    // Get all pages for this website
     const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
@@ -76,9 +63,11 @@ serve(async (req) => {
       throw new Error('Failed to fetch existing pages');
     }
 
+    logger.info(`Found ${existingPages?.length || 0} existing pages to analyze`);
+
     // Analyze with OpenAI
     const analysis = await analyzeWithOpenAI(content, existingPages || []);
-    logger.info('Analysis completed successfully');
+    logger.info('Analysis completed:', analysis);
 
     // Store analysis results
     const { error: analysisError } = await supabase
@@ -87,7 +76,6 @@ serve(async (req) => {
         url,
         title,
         content,
-        detected_themes: analysis.themes,
         main_keywords: analysis.keywords?.exact_match || [],
         seo_keywords: analysis.keywords || {},
         suggestions: analysis.outboundSuggestions || [],
