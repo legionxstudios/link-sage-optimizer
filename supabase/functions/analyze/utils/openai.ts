@@ -68,16 +68,19 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     // Filter existing pages to only include valid HTML pages
     const validPages = existingPages.filter(page => {
       if (!page.url || !isValidWebpageUrl(page.url)) {
+        logger.debug(`Filtered out invalid URL: ${page.url}`);
         return false;
       }
       // Don't include the current page
       if (page.url === content.url) {
+        logger.debug(`Filtered out self-reference: ${page.url}`);
         return false;
       }
       return true;
     });
 
     logger.info(`Found ${validPages.length} valid HTML pages for linking`);
+    logger.debug('Valid pages:', validPages);
 
     // Generate semantically relevant link suggestions
     const suggestionsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -136,6 +139,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       
       suggestions = JSON.parse(cleanContent);
       logger.info(`Parsed ${suggestions.length} suggestions from OpenAI`);
+      logger.debug('Raw suggestions:', suggestions);
     } catch (e) {
       logger.error('Error parsing OpenAI suggestions:', e);
       logger.error('Raw content:', suggestionsData.choices[0].message.content);
@@ -171,6 +175,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       }));
 
     logger.info(`Final validated suggestions: ${validatedSuggestions.length}`);
+    logger.debug('Validated suggestions:', validatedSuggestions);
     
     return {
       keywords,
