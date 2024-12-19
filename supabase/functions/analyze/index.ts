@@ -54,7 +54,7 @@ serve(async (req) => {
       const analysis = await analyzeWithOpenAI(content);
       logger.info('OpenAI analysis complete');
 
-      // Store analysis results
+      // Store analysis results using upsert
       const { error: analysisError } = await supabase
         .from('page_analysis')
         .upsert({
@@ -62,7 +62,16 @@ serve(async (req) => {
           title,
           content,
           seo_keywords: analysis.keywords,
-          suggestions: analysis.outboundSuggestions
+          suggestions: analysis.outboundSuggestions,
+          created_at: new Date().toISOString()
+        }, {
+          onConflict: 'url',
+          update: {
+            title,
+            content,
+            seo_keywords: analysis.keywords,
+            suggestions: analysis.outboundSuggestions
+          }
         });
 
       if (analysisError) {
