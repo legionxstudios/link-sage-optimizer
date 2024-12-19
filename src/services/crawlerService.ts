@@ -20,22 +20,29 @@ export interface AnalysisResponse {
 }
 
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
+const INITIAL_RETRY_DELAY = 1000; // 1 second
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const retryWithBackoff = async <T>(
   operation: () => Promise<T>,
-  retries: number = MAX_RETRIES
+  retries: number = MAX_RETRIES,
+  delay: number = INITIAL_RETRY_DELAY
 ): Promise<T> => {
   try {
     return await operation();
   } catch (error) {
-    if (retries === 0) throw error;
+    console.error(`Operation failed:`, error);
     
-    await sleep(RETRY_DELAY * (MAX_RETRIES - retries + 1));
-    console.log(`Retrying operation, ${retries} attempts remaining`);
-    return retryWithBackoff(operation, retries - 1);
+    if (retries === 0) {
+      console.error('Max retries reached, failing operation');
+      throw error;
+    }
+    
+    const nextDelay = delay * 2; // Exponential backoff
+    console.log(`Retrying operation in ${delay}ms, ${retries} attempts remaining`);
+    await sleep(delay);
+    return retryWithBackoff(operation, retries - 1, nextDelay);
   }
 };
 

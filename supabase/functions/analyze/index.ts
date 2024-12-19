@@ -8,6 +8,7 @@ import { logger } from "./utils/logger.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 serve(async (req) => {
@@ -41,10 +42,16 @@ serve(async (req) => {
       try {
         response = await fetch(url, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)'
-          }
+            'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+          },
+          redirect: 'follow',
         });
+        
         if (response.ok) break;
+        
+        logger.warn(`Fetch attempt failed with status ${response.status}, retries left: ${retries}`);
         retries--;
         if (retries > 0) await new Promise(r => setTimeout(r, 1000));
       } catch (error) {
@@ -73,15 +80,15 @@ serve(async (req) => {
     // Get website domain
     const domain = new URL(url).hostname;
 
-    // Get website ID
-    const { data: website } = await supabase
+    // Get website ID or create new website
+    const { data: website, error: websiteError } = await supabase
       .from('websites')
+      .upsert({ domain })
       .select('id')
-      .eq('domain', domain)
       .single();
 
-    if (!website) {
-      throw new Error('Website not found');
+    if (websiteError) {
+      throw websiteError;
     }
 
     // Get existing pages from the same website
@@ -92,12 +99,7 @@ serve(async (req) => {
       .neq('url', url);
 
     // Analyze with OpenAI
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAIApiKey) {
-      throw new Error('OpenAI API key not configured');
-    }
-
-    const analysis = await analyzeWithOpenAI(content, existingPages);
+    const analysis = await analyzeWithOpenAI(content, existingPages || []);
 
     // Store analysis results
     const { error: analysisError } = await supabase
@@ -118,6 +120,7 @@ serve(async (req) => {
       throw analysisError;
     }
 
+    logger.info('Analysis completed successfully');
     return new Response(
       JSON.stringify(analysis),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
