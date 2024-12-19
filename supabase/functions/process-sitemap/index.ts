@@ -8,16 +8,49 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      headers: corsHeaders 
+    });
   }
 
   try {
-    const { url } = await req.json();
+    // Parse request body
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      console.error('Error parsing request body:', e);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid JSON in request body',
+          details: e.message 
+        }), {
+          status: 400,
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    }
+
+    const { url } = body;
     console.log('Starting sitemap processing for URL:', url);
     
     if (!url) {
-      throw new Error('URL is required');
+      return new Response(
+        JSON.stringify({ 
+          error: 'URL is required' 
+        }), {
+          status: 400,
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
 
     // Try to find sitemap.xml
@@ -32,7 +65,18 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
+      console.error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
+      return new Response(
+        JSON.stringify({ 
+          error: `Failed to fetch sitemap: ${response.status} ${response.statusText}` 
+        }), {
+          status: response.status,
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
 
     const xmlText = await response.text();
@@ -40,10 +84,20 @@ serve(async (req) => {
 
     // Parse XML using deno-dom WASM parser
     const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, 'text/html');
+    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
     
     if (!xmlDoc) {
-      throw new Error('Failed to parse sitemap XML');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to parse sitemap XML' 
+        }), {
+          status: 500,
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
 
     // Extract URLs from <url><loc> tags
@@ -86,7 +140,18 @@ serve(async (req) => {
 
     if (websiteError) {
       console.error('Error upserting website record:', websiteError);
-      throw websiteError;
+      return new Response(
+        JSON.stringify({ 
+          error: 'Database error while processing website',
+          details: websiteError 
+        }), {
+          status: 500,
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
 
     console.log('Website record created/updated:', website);
@@ -121,8 +186,7 @@ serve(async (req) => {
         success: true, 
         message: `Processed ${processedUrls.length} URLs from sitemap`,
         urls: processedUrls 
-      }),
-      { 
+      }), { 
         headers: { 
           ...corsHeaders,
           'Content-Type': 'application/json'
@@ -136,10 +200,12 @@ serve(async (req) => {
       JSON.stringify({ 
         error: error.message,
         details: error
-      }),
-      { 
+      }), { 
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
       }
     );
   }

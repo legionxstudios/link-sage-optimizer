@@ -67,6 +67,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       throw sitemapError;
     }
 
+    if (!sitemapData?.success) {
+      console.error("Sitemap processing failed:", sitemapData);
+      toast.error(sitemapData?.error || "Failed to process sitemap");
+      throw new Error(sitemapData?.error || "Failed to process sitemap");
+    }
+
     console.log("Sitemap processing result:", sitemapData);
     toast.success(`Found ${sitemapData?.urls?.length || 0} pages in sitemap`);
 
