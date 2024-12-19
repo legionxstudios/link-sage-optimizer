@@ -1,6 +1,6 @@
-import { logger } from "./logger";
-import { ExistingPage, AnalysisResult } from "./types";
-import { generateSuggestions } from "./suggestion-generator";
+import { logger } from "./logger.ts";
+import { ExistingPage, AnalysisResult } from "./types.ts";
+import { generateSuggestions } from "./suggestion-generator.ts";
 
 export async function analyzeWithOpenAI(
   content: string, 
@@ -42,7 +42,7 @@ async function extractKeywords(content: string) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4',
       messages: [
         {
           role: 'system',
