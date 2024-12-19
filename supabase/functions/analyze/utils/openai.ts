@@ -12,7 +12,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
     logger.info('Starting OpenAI analysis...');
     logger.info(`Analyzing content with ${existingPages.length} existing pages`);
     
-    // First get keywords
+    // First get keywords from the content
     const keywordsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -65,7 +65,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       logger.error('Raw content:', keywordsData.choices[0].message.content);
     }
 
-    // Filter existing pages to only include valid HTML pages (no images)
+    // Filter existing pages to only include valid HTML pages
     const validPages = existingPages.filter(page => {
       if (!page.url || !isValidWebpageUrl(page.url)) {
         return false;
@@ -79,7 +79,7 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
 
     logger.info(`Found ${validPages.length} valid HTML pages for linking`);
 
-    // Generate link suggestions using the extracted exact match keywords
+    // Generate semantically relevant link suggestions
     const suggestionsResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -93,22 +93,26 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
             role: 'system',
             content: `You are an SEO expert analyzing content and suggesting internal links. 
             Rules:
-            1. ONLY use the provided exact match keywords as anchor text
-            2. ONLY suggest internal HTML pages (no images or external links)
-            3. Each suggestion must use a keyword that appears EXACTLY in the source content
-            4. Do not suggest linking back to the same page
-            5. Verify semantic relevance between keyword and target page
+            1. For each target page, identify its main topic/theme from its title and content
+            2. Find keywords from the source content that BEST DESCRIBE the target page's topic
+            3. Only use keywords that appear EXACTLY in the source content
+            4. The anchor text should semantically match the target page's topic
+            5. Do not suggest linking back to the same page
+            6. Ensure strong topical relevance between source content and target page
+            
+            Example:
+            If target page is about "vintage photography guide", use anchor text like "vintage photography tips" or "classic photography techniques" that appears in source content, NOT product names like "Polaroid SX-70".
             
             Return ONLY a JSON array of suggestions with:
-            - suggestedAnchorText: one of the provided exact match keywords
-            - targetUrl: URL of an internal HTML page
-            - context: Brief description of relevance
+            - suggestedAnchorText: keyword from source that best describes target page's topic
+            - targetUrl: URL of target page
+            - context: Brief explanation of topical relevance
             - relevanceScore: 0-1 score based on semantic relevance
-            - matchType: "keyword_based" for suggestions using exact match keywords`
+            - matchType: "keyword_based"`
           },
           {
             role: 'user',
-            content: `Content to analyze: ${content}\n\nExact match keywords: ${JSON.stringify(keywords.exact_match)}\n\nAvailable pages to link to:\n${
+            content: `Source content: ${content}\n\nAvailable keywords: ${JSON.stringify(keywords.exact_match)}\n\nTarget pages:\n${
               validPages.map(page => `URL: ${page.url}\nTitle: ${page.title}\nContent: ${page.content?.substring(0, 500)}...\n---`).join('\n')
             }`
           }
@@ -137,16 +141,16 @@ export async function analyzeWithOpenAI(content: string, existingPages: Existing
       logger.error('Raw content:', suggestionsData.choices[0].message.content);
     }
 
-    // Additional validation of suggestions
+    // Validate suggestions
     const validatedSuggestions = suggestions
       .filter(suggestion => {
-        // Verify the suggested anchor text is from our exact match keywords
+        // Verify the suggested anchor text exists in our keywords
         if (!keywords.exact_match.includes(suggestion.suggestedAnchorText)) {
           logger.warn(`Suggestion skipped - anchor text not in exact matches: ${suggestion.suggestedAnchorText}`);
           return false;
         }
         
-        // Verify it's a valid webpage URL
+        // Verify target URL
         if (!suggestion.targetUrl || !isValidWebpageUrl(suggestion.targetUrl)) {
           logger.warn(`Invalid URL in suggestion: ${suggestion.targetUrl}`);
           return false;
