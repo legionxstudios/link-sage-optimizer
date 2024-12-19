@@ -6,13 +6,14 @@ export interface SitemapUrl {
 export const fetchAndParseSitemap = async (url: string) => {
   console.log('Starting sitemap processing for URL:', url);
   
-  // Try to determine the sitemap URL
+  // Try to determine the sitemap URL by checking common locations
+  const baseUrl = new URL(url);
   const possibleSitemapUrls = [
     url,
-    new URL('/sitemap.xml', url).toString(),
-    new URL('/sitemap_index.xml', url).toString(),
-    new URL('/wp-sitemap.xml', url).toString(),
-    new URL('/robots.txt', url).toString()
+    `${baseUrl.origin}/sitemap.xml`,
+    `${baseUrl.origin}/sitemap_index.xml`,
+    `${baseUrl.origin}/wp-sitemap.xml`,
+    `${baseUrl.origin}/robots.txt`
   ];
 
   console.log('Will try these sitemap locations:', possibleSitemapUrls);
@@ -33,6 +34,14 @@ export const fetchAndParseSitemap = async (url: string) => {
         continue;
       }
 
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/xml') && 
+          !contentType.includes('application/xml') && 
+          !contentType.includes('text/plain')) {
+        console.log(`Skipping ${sitemapUrl} due to content type: ${contentType}`);
+        continue;
+      }
+
       const text = await response.text();
       console.log(`Received content from ${sitemapUrl}, length: ${text.length}`);
       
@@ -46,9 +55,9 @@ export const fetchAndParseSitemap = async (url: string) => {
             const sitemapResponse = await fetch(robotsSitemapUrl);
             if (sitemapResponse.ok) {
               const sitemapText = await sitemapResponse.text();
-              const robotsUrls = await extractUrlsFromXml(sitemapText);
-              if (robotsUrls.length > 0) {
-                return robotsUrls;
+              const urls = await extractUrlsFromXml(sitemapText);
+              if (urls.length > 0) {
+                return urls;
               }
             }
           } catch (error) {
@@ -58,6 +67,7 @@ export const fetchAndParseSitemap = async (url: string) => {
         continue;
       }
 
+      // Try to parse as XML sitemap
       const urls = await extractUrlsFromXml(text);
       if (urls.length > 0) {
         console.log(`Successfully found ${urls.length} URLs in ${sitemapUrl}`);
@@ -69,60 +79,72 @@ export const fetchAndParseSitemap = async (url: string) => {
     }
   }
 
-  throw new Error('No valid sitemap found at any common location');
+  // If we get here, we couldn't find a valid sitemap
+  throw new Error('Could not find a valid sitemap. Please ensure the site has a sitemap.xml file or check robots.txt for sitemap location.');
 }
 
 async function extractUrlsFromXml(xml: string): Promise<SitemapUrl[]> {
-  console.log(`Extracting URLs from XML content, length: ${xml.length}`);
+  console.log(`Processing XML content of length: ${xml.length}`);
   const urls: SitemapUrl[] = [];
   
-  // First check if this is a sitemap index
-  if (xml.includes('<sitemapindex')) {
-    console.log('Detected sitemap index format');
-    // Extract URLs from sitemap index
-    const sitemapMatches = xml.match(/<sitemap>[\s\S]*?<\/sitemap>/g) || [];
-    
-    for (const sitemapEntry of sitemapMatches) {
-      const locMatch = sitemapEntry.match(/<loc>(.*?)<\/loc>/);
-      if (locMatch && locMatch[1]) {
-        const childUrl = locMatch[1].trim();
-        console.log('Found child sitemap:', childUrl);
-        try {
-          const response = await fetch(childUrl);
-          if (response.ok) {
-            const childXml = await response.text();
-            const childUrls = await extractUrlsFromXml(childXml);
-            urls.push(...childUrls);
+  try {
+    // First check if this is a sitemap index
+    if (xml.includes('<sitemapindex')) {
+      console.log('Detected sitemap index format');
+      const sitemapMatches = xml.match(/<sitemap>[\s\S]*?<\/sitemap>/g) || [];
+      
+      for (const sitemapEntry of sitemapMatches) {
+        const locMatch = sitemapEntry.match(/<loc>(.*?)<\/loc>/);
+        if (locMatch && locMatch[1]) {
+          const childUrl = locMatch[1].trim();
+          console.log('Found child sitemap:', childUrl);
+          try {
+            const response = await fetch(childUrl);
+            if (response.ok) {
+              const childXml = await response.text();
+              const childUrls = await extractUrlsFromXml(childXml);
+              urls.push(...childUrls);
+            }
+          } catch (error) {
+            console.error(`Error fetching child sitemap ${childUrl}:`, error);
           }
-        } catch (error) {
-          console.error(`Error fetching child sitemap ${childUrl}:`, error);
+        }
+      }
+    } else {
+      // Parse regular sitemap
+      console.log('Processing regular sitemap format');
+      const urlMatches = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
+      
+      for (const urlEntry of urlMatches) {
+        const locMatch = urlEntry.match(/<loc>(.*?)<\/loc>/);
+        const lastmodMatch = urlEntry.match(/<lastmod>(.*?)<\/lastmod>/);
+        
+        if (locMatch && locMatch[1]) {
+          const url = locMatch[1].trim();
+          if (url && isValidUrl(url)) {
+            urls.push({
+              url,
+              lastModified: lastmodMatch ? lastmodMatch[1].trim() : null
+            });
+          }
         }
       }
     }
-  } else {
-    // Parse regular sitemap
-    console.log('Processing regular sitemap format');
-    const urlMatches = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
+
+    console.log(`Found ${urls.length} valid URLs in XML content`);
+    return urls;
     
-    for (const urlEntry of urlMatches) {
-      const locMatch = urlEntry.match(/<loc>(.*?)<\/loc>/);
-      const lastmodMatch = urlEntry.match(/<lastmod>(.*?)<\/lastmod>/);
-      
-      if (locMatch && locMatch[1]) {
-        urls.push({
-          url: locMatch[1].trim(),
-          lastModified: lastmodMatch ? lastmodMatch[1].trim() : null
-        });
-      }
-    }
+  } catch (error) {
+    console.error('Error parsing XML content:', error);
+    return [];
   }
+}
 
-  console.log(`Found ${urls.length} URLs in XML content`);
-  if (urls.length === 0) {
-    console.log('Sample of content that yielded no URLs:', xml.substring(0, 500));
-  } else {
-    console.log('Sample URLs found:', urls.slice(0, 3));
+function isValidUrl(urlString: string): boolean {
+  try {
+    new URL(urlString);
+    return true;
+  } catch {
+    return false;
   }
-
-  return urls;
 }

@@ -60,7 +60,10 @@ serve(async (req) => {
 
     if (urls.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'No URLs found in sitemap' }),
+        JSON.stringify({ 
+          error: 'No URLs found in sitemap',
+          details: 'The sitemap was processed successfully but no valid URLs were found.'
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
