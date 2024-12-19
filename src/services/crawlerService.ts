@@ -32,10 +32,11 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     if (sitemapError) {
       console.error("Sitemap processing error:", sitemapError);
       toast.error("Failed to process sitemap");
-    } else {
-      console.log("Sitemap processing result:", sitemapData);
-      toast.success(`Found ${sitemapData?.urls?.length || 0} pages in sitemap`);
+      throw sitemapError;
     }
+
+    console.log("Sitemap processing result:", sitemapData);
+    toast.success(`Found ${sitemapData?.urls?.length || 0} pages in sitemap`);
 
     // Then analyze the page
     console.log("Invoking analyze function with URL:", url);
@@ -45,11 +46,8 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
     if (analysisError) {
       console.error("Analysis error:", analysisError);
-      toast({
-        title: "Analysis Error",
-        description: analysisError.message,
-      });
-      throw new Error(analysisError.message);
+      toast.error(analysisError.message);
+      throw analysisError;
     }
 
     console.log("Raw analysis response:", analysisData);
@@ -80,8 +78,6 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     console.log("Processed keywords:", keywords);
     console.log("Processed suggestions:", suggestions);
 
-    toast.success("Analysis complete!");
-
     return {
       keywords,
       outboundSuggestions: suggestions
@@ -89,7 +85,8 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
 
   } catch (error) {
     console.error("Error in page analysis:", error);
-    toast.error(error instanceof Error ? error.message : "Unknown error occurred");
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    toast.error(errorMessage);
     throw error;
   }
 };

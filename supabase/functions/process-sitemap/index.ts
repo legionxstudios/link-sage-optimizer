@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { logger } from "./utils/logger.ts";
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { logger } from "./utils/logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,7 +26,12 @@ serve(async (req) => {
     const sitemapUrl = new URL('/sitemap.xml', url).toString();
     logger.info('Attempting to fetch sitemap from:', sitemapUrl);
 
-    const response = await fetch(sitemapUrl);
+    const response = await fetch(sitemapUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)'
+      }
+    });
+
     if (!response.ok) {
       logger.error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
       throw new Error(`Failed to fetch sitemap: ${response.status} ${response.statusText}`);
@@ -83,6 +88,7 @@ serve(async (req) => {
     logger.info('Website record created/updated:', website);
 
     // Insert pages
+    const processedUrls = [];
     for (const pageUrl of urls) {
       try {
         const { error: pageError } = await supabase
@@ -97,6 +103,7 @@ serve(async (req) => {
           logger.error(`Error inserting page ${pageUrl.url}:`, pageError);
         } else {
           logger.info(`Successfully queued page for crawling: ${pageUrl.url}`);
+          processedUrls.push(pageUrl.url);
         }
       } catch (error) {
         logger.error(`Error processing URL ${pageUrl.url}:`, error);
@@ -106,8 +113,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Processed ${urls.length} URLs from sitemap`,
-        urls: urls 
+        message: `Processed ${processedUrls.length} URLs from sitemap`,
+        urls: processedUrls 
       }),
       { 
         headers: { 
