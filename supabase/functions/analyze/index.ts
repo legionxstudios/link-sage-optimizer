@@ -22,6 +22,13 @@ serve(async (req) => {
       throw new Error('URL is required');
     }
 
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch (e) {
+      throw new Error(`Invalid URL: '${url}'`);
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -69,7 +76,7 @@ serve(async (req) => {
 
     // Wait for all pages to be processed before proceeding
     logger.info('Starting OpenAI analysis with all pages');
-    const analysis = await analyzeWithOpenAI(content, existingPages || [], url); // Pass the URL
+    const analysis = await analyzeWithOpenAI(content, existingPages || [], url);
     logger.info('Analysis completed with full page set:', {
       keywordCount: Object.keys(analysis.keywords || {}).length,
       suggestionCount: analysis.outboundSuggestions?.length || 0

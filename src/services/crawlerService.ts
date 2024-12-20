@@ -91,15 +91,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     const urlsFound = sitemapData?.urls?.length || 0;
     toast.success(`Found ${urlsFound} pages in sitemap`);
 
-    // Then analyze the page - ensure we wait for crawling to complete
+    // Then analyze the page
     console.log("Starting content analysis for URL:", url);
     
     const { data: analysisData, error: analysisError } = await retryWithBackoff(() =>
       supabase.functions.invoke('analyze', {
-        body: { 
-          url,
-          crawlCompleted: true
-        }
+        body: { url }
       })
     );
 
