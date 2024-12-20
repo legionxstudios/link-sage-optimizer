@@ -5,28 +5,24 @@ export function calculateUrlScore(keyword: string, url: string): number {
     const urlSlug = new URL(url).pathname.toLowerCase();
     const keywordSlug = keyword.toLowerCase().replace(/\s+/g, '-');
     
-    // Check for exact slug match
+    // Exact slug match gets highest score
     if (urlSlug.includes(keywordSlug)) {
-      logger.info(`Exact URL match found for "${keyword}"`);
-      return 1.0;
+      logger.info(`High URL relevance (0.8) for "${keyword}" in ${url}`);
+      return 0.8;
     }
     
     // Check for partial word matches in URL
     const keywordParts = keyword.toLowerCase().split(' ');
-    let matchCount = 0;
+    const matchCount = keywordParts.filter(part => 
+      urlSlug.includes(part.replace(/[^a-z0-9]/g, ''))
+    ).length;
     
-    keywordParts.forEach(part => {
-      if (urlSlug.includes(part)) {
-        matchCount++;
-      }
-    });
-    
-    const score = matchCount / keywordParts.length;
-    logger.info(`URL score for "${keyword}": ${score} (${matchCount}/${keywordParts.length} parts matched)`);
-    return score;
+    const partialScore = matchCount / keywordParts.length * 0.5;
+    logger.info(`Partial URL relevance (${partialScore}) for "${keyword}" in ${url}`);
+    return partialScore;
     
   } catch (error) {
-    logger.error(`Error calculating URL score: ${error}`);
+    logger.error(`Error calculating URL relevance for ${url}:`, error);
     return 0;
   }
 }

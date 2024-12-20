@@ -1,7 +1,7 @@
 import { logger } from "../logger.ts";
-import { calculateUrlRelevance } from "./url-relevance.ts";
-import { calculateContentRelevance } from "./content-relevance.ts";
-import { calculateTitleRelevance } from "./title-relevance.ts";
+import { calculateUrlScore } from "./url-scorer.ts";
+import { calculateContentScore } from "./content-scorer.ts";
+import { calculateTitleScore } from "./title-scorer.ts";
 import type { ExistingPage } from "../types.ts";
 
 // Scoring weights for different components
@@ -16,9 +16,9 @@ export function calculateRelevanceScore(keyword: string, page: ExistingPage): nu
     if (!page.url) return 0;
     
     // Calculate individual component scores
-    const urlScore = calculateUrlRelevance(keyword, page.url);
-    const titleScore = calculateTitleRelevance(keyword, page.title);
-    const contentScore = calculateContentRelevance(keyword, page.content);
+    const urlScore = calculateUrlScore(keyword, page.url);
+    const titleScore = calculateTitleScore(keyword, page.title);
+    const contentScore = calculateContentScore(keyword, page.content);
     
     // Calculate weighted final score
     const finalScore = (

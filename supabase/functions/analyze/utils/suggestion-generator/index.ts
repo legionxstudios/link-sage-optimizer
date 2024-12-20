@@ -1,7 +1,8 @@
 import { logger } from "../logger.ts";
 import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
 import { isValidContentUrl } from "./url-filters.ts";
-import { calculateRelevanceScore, extractContext } from "./scoring.ts";
+import { calculateRelevanceScore } from "../scoring/relevance-calculator.ts";
+import { extractContext } from "./scoring.ts";
 
 export function generateSuggestions({
   keywords,

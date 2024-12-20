@@ -1,8 +1,4 @@
-import { ExistingPage } from "../types.ts";
 import { logger } from "../logger.ts";
-import { calculateRelevanceScore } from "../scoring/relevance-calculator.ts";
-
-export { calculateRelevanceScore };
 
 export function extractContext(content: string, keyword: string): string {
   try {
