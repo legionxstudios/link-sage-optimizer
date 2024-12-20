@@ -60,23 +60,22 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
   console.log("Starting page analysis for:", url);
   
   try {
-    // First process the sitemap with better error handling
+    // First process the sitemap
     console.log("Processing sitemap for URL:", url);
     
     const requestBody = { url };
     console.log("Sitemap request body:", requestBody);
     
-    const { data: sitemapData, error: sitemapError } = await supabase.functions.invoke('process-sitemap', {
-      body: requestBody,
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
+    const { data: sitemapData, error: sitemapError } = await retryWithBackoff(() =>
+      supabase.functions.invoke('process-sitemap', {
+        body: requestBody
+      })
+    );
 
     if (sitemapError) {
       console.error("Sitemap processing error:", sitemapError);
       toast.error("Failed to process sitemap");
-      throw new Error(`Sitemap processing failed: ${sitemapError.message}`);
+      throw sitemapError;
     }
 
     console.log("Raw sitemap response:", sitemapData);
@@ -92,23 +91,22 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     const urlsFound = sitemapData?.urls?.length || 0;
     toast.success(`Found ${urlsFound} pages in sitemap`);
 
-    // Then analyze the page with better error handling
+    // Then analyze the page - ensure we wait for crawling to complete
     console.log("Starting content analysis for URL:", url);
     
-    const { data: analysisData, error: analysisError } = await supabase.functions.invoke('analyze', {
-      body: { 
-        url,
-        crawlCompleted: true
-      },
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    });
+    const { data: analysisData, error: analysisError } = await retryWithBackoff(() =>
+      supabase.functions.invoke('analyze', {
+        body: { 
+          url,
+          crawlCompleted: true
+        }
+      })
+    );
 
     if (analysisError) {
       console.error("Analysis error:", analysisError);
       toast.error("Failed to analyze page");
-      throw new Error(`Analysis failed: ${analysisError.message}`);
+      throw analysisError;
     }
 
     console.log("Raw analysis response:", analysisData);
@@ -144,7 +142,7 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       outboundSuggestions: suggestions
     };
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in page analysis:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
     toast.error(errorMessage);
