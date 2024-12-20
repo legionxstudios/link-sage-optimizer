@@ -1,10 +1,11 @@
 import { logger } from "./logger.ts";
 import { ExistingPage, AnalysisResult } from "./types.ts";
-import { generateSuggestions } from "./suggestion-generator.ts";
+import { generateSuggestions } from "./suggestion-generator/index.ts";
 
 export async function analyzeWithOpenAI(
   content: string, 
-  existingPages: ExistingPage[]
+  existingPages: ExistingPage[],
+  sourceUrl: string
 ): Promise<AnalysisResult> {
   try {
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
@@ -12,6 +13,11 @@ export async function analyzeWithOpenAI(
     if (!openAIApiKey) {
       logger.error('OpenAI API key is not configured');
       throw new Error('OpenAI API key is not configured');
+    }
+
+    if (!sourceUrl) {
+      logger.error('Source URL is undefined');
+      throw new Error('Source URL is required for analysis');
     }
 
     logger.info('Starting OpenAI analysis with full page set...');
@@ -23,7 +29,12 @@ export async function analyzeWithOpenAI(
     logger.info('Extracted keywords:', keywords);
 
     // Generate link suggestions based on keywords and ALL existing pages
-    const suggestions = await generateSuggestions(keywords, existingPages);
+    const suggestions = generateSuggestions({
+      keywords,
+      existingPages,
+      sourceUrl
+    });
+    
     logger.info(`Generated ${suggestions.length} suggestions from ${existingPages.length} pages`);
     
     return {
