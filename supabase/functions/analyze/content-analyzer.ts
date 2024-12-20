@@ -51,7 +51,8 @@ export async function extractContent(url: string) {
     logger.info('Extracted page data:', {
       title,
       contentLength: mainContent.length,
-      linksCount: links.length
+      linksCount: links.length,
+      contentSample: mainContent.substring(0, 100)
     });
 
     return {
@@ -79,18 +80,24 @@ function extractMainContent(doc: Document): string {
     '.post-content',
     '.entry-content',
     '.article-content',
-    '#content'
+    '#content',
+    '.main-content',
+    '.page-content'
   ];
 
   // Find main content container
   let contentArea = null;
   for (const selector of contentSelectors) {
     contentArea = doc.querySelector(selector);
-    if (contentArea) break;
+    if (contentArea) {
+      logger.info(`Found content using selector: ${selector}`);
+      break;
+    }
   }
 
   // Fallback to body if no content area found
   if (!contentArea) {
+    logger.info('No specific content area found, using body');
     contentArea = doc.body;
   }
 
@@ -109,12 +116,14 @@ function extractMainContent(doc: Document): string {
     }
 
     const text = element.textContent?.trim();
-    if (text && text.length > 0) {
+    if (text && text.length > 10) { // Only include text that's likely to be content
       contentParts.push(text);
     }
   });
 
-  return contentParts.join('\n\n');
+  const content = contentParts.join('\n\n');
+  logger.info(`Extracted content length: ${content.length} characters`);
+  return content;
 }
 
 function extractLinks(doc: Document, baseUrl: string): Link[] {
@@ -130,14 +139,18 @@ function extractLinks(doc: Document, baseUrl: string): Link[] {
         const absoluteUrl = new URL(href, baseUrl).toString();
         const isInternal = new URL(absoluteUrl).hostname === domain;
 
-        return {
+        const linkData = {
           url: absoluteUrl,
           text: link.textContent?.trim() || '',
           context: extractLinkContext(link),
           is_internal: isInternal
         };
+
+        logger.debug('Extracted link:', linkData);
+        return linkData;
+
       } catch (e) {
-        console.error(`Error processing link ${href}:`, e);
+        logger.error(`Error processing link ${href}:`, e);
         return null;
       }
     })

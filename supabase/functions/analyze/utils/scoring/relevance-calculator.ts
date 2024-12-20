@@ -32,6 +32,7 @@ export function calculateRelevanceScore(keyword: string, page: ExistingPage): nu
       title: titleScore,
       content: contentScore,
       final: finalScore,
+      pageUrl: page.url,
       pageTitle: page.title?.substring(0, 50),
       contentLength: page.content?.length || 0
     });

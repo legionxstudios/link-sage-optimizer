@@ -27,14 +27,15 @@ export function calculateContentScore(keyword: string, content: string): number 
   
   // Calculate final content score with higher weight for exact matches
   const finalScore = (densityScore * 0.8) + (isProminent ? 0.2 : 0);
-
+  
   logger.info(`Content score for "${keyword}":`, {
     exactMatches,
     density: `${(density).toFixed(2)}%`,
     densityScore,
     isProminent,
     finalScore,
-    contentLength: content.length
+    contentLength: content.length,
+    wordCount
   });
   
   return finalScore;
