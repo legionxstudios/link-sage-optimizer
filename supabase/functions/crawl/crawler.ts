@@ -18,7 +18,13 @@ export async function crawlPage(
   
   try {
     console.log(`Crawling: ${url}`);
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; LovableCrawler/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      }
+    });
+
     if (!response.ok) {
       console.warn(`Failed to fetch ${url}: ${response.status}`);
       return;
@@ -32,10 +38,20 @@ export async function crawlPage(
       return;
     }
 
+    // Remove non-content elements first
+    ['script', 'style', 'noscript', 'iframe', 'nav', 'footer', 'header'].forEach(tag => {
+      doc.querySelectorAll(tag).forEach(el => el.remove());
+    });
+
     // Extract page content
-    const title = doc.querySelector('title')?.textContent || '';
+    const title = doc.querySelector('title')?.textContent?.trim() || '';
+    console.log(`Extracted title: ${title}`);
+
     const mainContent = extractMainContent(doc);
+    console.log(`Extracted content length: ${mainContent.length}`);
+
     const keywords = extractKeywords(mainContent);
+    console.log(`Extracted keywords:`, keywords);
     
     // Extract and process links
     const links = Array.from(doc.querySelectorAll('a[href]'));
@@ -65,8 +81,9 @@ export async function crawlPage(
       }
     }
 
-    // Store page in database
+    // Store page in database with full content
     const page = await savePage(websiteId, url, title, mainContent);
+    console.log(`Saved page with title: ${title} and content length: ${mainContent.length}`);
 
     // Save all extracted links
     for (const link of processedLinks) {
@@ -105,10 +122,14 @@ function extractMainContent(doc: Document): string {
   const contentSelectors = [
     'main',
     'article',
-    '.content',
     '[role="main"]',
+    '.content',
     '.post-content',
-    '.entry-content'
+    '.entry-content',
+    '.article-content',
+    '#content',
+    '.main-content',
+    '.page-content'
   ];
 
   let content = '';
@@ -118,16 +139,25 @@ function extractMainContent(doc: Document): string {
     const element = doc.querySelector(selector);
     if (element) {
       content = element.textContent || '';
+      console.log(`Found content using selector: ${selector}`);
       break;
     }
   }
 
   // Fallback to body if no content found
   if (!content) {
+    console.log('No specific content area found, using body content');
     content = doc.body?.textContent || '';
   }
 
-  return content.trim();
+  // Clean up the content
+  content = content
+    .replace(/\s+/g, ' ')
+    .replace(/\n+/g, ' ')
+    .trim();
+
+  console.log(`Extracted content length: ${content.length} characters`);
+  return content;
 }
 
 function extractKeywords(content: string): string[] {

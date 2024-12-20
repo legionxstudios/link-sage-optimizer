@@ -28,21 +28,7 @@ export async function getOrCreateWebsite(domain: string): Promise<Website> {
 
     if (existingWebsite) {
       console.log('Found existing website:', existingWebsite);
-      
-      // Update last_crawled_at
-      const { data: updatedWebsite, error: updateError } = await supabase
-        .from('websites')
-        .update({ last_crawled_at: new Date().toISOString() })
-        .eq('id', existingWebsite.id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error('Error updating website:', updateError);
-        throw new Error(`Failed to update website: ${updateError.message}`);
-      }
-
-      return updatedWebsite;
+      return existingWebsite;
     }
 
     // Create new website if none exists
@@ -71,7 +57,7 @@ export async function getOrCreateWebsite(domain: string): Promise<Website> {
 }
 
 export async function savePage(websiteId: string, url: string, title: string, content: string) {
-  console.log('Saving page:', { websiteId, url, title });
+  console.log('Saving page:', { websiteId, url, title, contentLength: content.length });
   
   try {
     // First try to find existing page
@@ -99,6 +85,7 @@ export async function savePage(websiteId: string, url: string, title: string, co
         throw new Error(`Failed to update page: ${updateError.message}`);
       }
 
+      console.log('Updated existing page:', updatedPage);
       return updatedPage;
     }
 
@@ -120,6 +107,7 @@ export async function savePage(websiteId: string, url: string, title: string, co
       throw new Error(`Failed to create page: ${createError.message}`);
     }
 
+    console.log('Created new page:', newPage);
     return newPage;
   } catch (error) {
     console.error('Error in savePage:', error);
@@ -164,7 +152,13 @@ export async function savePageAnalysis(
   outboundLinksCount: number,
   inboundLinksCount: number
 ) {
-  console.log('Saving page analysis:', { url, title, outboundLinksCount, inboundLinksCount });
+  console.log('Saving page analysis:', { 
+    url, 
+    title, 
+    contentLength: content.length,
+    outboundLinksCount, 
+    inboundLinksCount 
+  });
   
   try {
     const { data, error } = await supabase
@@ -186,6 +180,7 @@ export async function savePageAnalysis(
       throw new Error(`Failed to save page analysis: ${error.message}`);
     }
 
+    console.log('Saved page analysis:', data);
     return data;
   } catch (error) {
     console.error('Error in savePageAnalysis:', error);
