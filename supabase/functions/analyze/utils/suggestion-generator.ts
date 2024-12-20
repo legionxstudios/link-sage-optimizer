@@ -12,6 +12,10 @@ export function generateSuggestions(
   const usedUrls = new Set<string>();
   const usedAnchorTexts = new Set<string>();
 
+  // Get base domain from first existing page to use as reference
+  const baseDomain = existingPages.length > 0 ? new URL(existingPages[0].url).hostname : '';
+  logger.info(`Using base domain: ${baseDomain}`);
+
   // Process each keyword type with different relevance thresholds
   const keywordTypes = {
     exact_match: 0.2,
@@ -25,7 +29,6 @@ export function generateSuggestions(
     logger.info(`Processing ${keywordList.length} ${matchType} keywords with threshold ${threshold}`);
 
     for (const keyword of keywordList) {
-      // Extract the actual keyword from the format "keyword (density) - context"
       const actualKeyword = keyword.split('(')[0].trim().toLowerCase();
       
       // Skip if we've already used this anchor text
@@ -37,7 +40,7 @@ export function generateSuggestions(
       logger.info(`Processing keyword: "${actualKeyword}"`);
       
       // Find matching pages for this keyword
-      const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls);
+      const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls, baseDomain);
       logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
       
       // Find the best matching page for this keyword
@@ -45,8 +48,8 @@ export function generateSuggestions(
       let bestScore = 0;
 
       for (const page of matchingPages) {
-        // Skip if the URL is external (doesn't match the current domain)
-        if (!isInternalUrl(page.url)) {
+        // Skip if the URL is external
+        if (!isInternalUrl(page.url, baseDomain)) {
           logger.info(`Skipping external URL: ${page.url}`);
           continue;
         }
@@ -90,7 +93,8 @@ export function generateSuggestions(
 function findMatchingPages(
   keyword: string, 
   existingPages: ExistingPage[], 
-  usedUrls: Set<string>
+  usedUrls: Set<string>,
+  baseDomain: string
 ): ExistingPage[] {
   const keywordLower = keyword.toLowerCase();
   
@@ -99,7 +103,7 @@ function findMatchingPages(
     if (!page.url || usedUrls.has(page.url)) return false;
     
     // Skip non-content pages and external URLs
-    if (!isInternalUrl(page.url) ||
+    if (!isInternalUrl(page.url, baseDomain) ||
         page.url.includes('/wp-content/') ||
         page.url.includes('/cart') ||
         page.url.includes('/checkout') ||
@@ -164,11 +168,10 @@ function extractContext(content: string, keyword: string): string {
   return context;
 }
 
-function isInternalUrl(url: string): boolean {
+function isInternalUrl(url: string, baseDomain: string): boolean {
   try {
-    // Get the current domain from the URL being analyzed
-    const currentDomain = new URL(url).hostname;
-    return true; // For now, we'll consider all URLs as internal since we're working with crawled pages
+    const urlDomain = new URL(url).hostname;
+    return urlDomain === baseDomain;
   } catch (error) {
     logger.error(`Error checking if URL is internal: ${error}`);
     return false;
