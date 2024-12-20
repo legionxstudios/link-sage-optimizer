@@ -52,11 +52,12 @@ serve(async (req) => {
     }
 
     // Get all pages for this website
+    logger.info('Fetching existing pages for website:', websiteData.id);
     const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
       .eq('website_id', websiteData.id)
-      .neq('url', url);
+      .neq('url', url); // Exclude current page
 
     if (pagesError) {
       logger.error('Error fetching existing pages:', pagesError);
@@ -64,6 +65,7 @@ serve(async (req) => {
     }
 
     logger.info(`Found ${existingPages?.length || 0} existing pages to analyze`);
+    logger.debug('Sample of existing pages:', existingPages?.slice(0, 3));
 
     // Analyze with OpenAI
     const analysis = await analyzeWithOpenAI(content, existingPages || []);
