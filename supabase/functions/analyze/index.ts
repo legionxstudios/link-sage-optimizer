@@ -15,18 +15,25 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
-    logger.info('Starting analysis for:', url);
+    const requestData = await req.json();
+    logger.info('Received request data:', requestData);
 
-    if (!url) {
-      throw new Error('URL is required');
+    if (!requestData || typeof requestData !== 'object') {
+      throw new Error('Invalid request body');
+    }
+
+    const { url } = requestData;
+    logger.info('Extracted URL from request:', url);
+
+    if (!url || typeof url !== 'string') {
+      throw new Error('URL is required and must be a string');
     }
 
     // Validate URL format
     try {
       new URL(url);
     } catch (e) {
-      throw new Error(`Invalid URL: '${url}'`);
+      throw new Error(`Invalid URL format: '${url}'`);
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -63,7 +70,7 @@ serve(async (req) => {
       .from('pages')
       .select('url, title, content')
       .eq('website_id', websiteData.id)
-      .neq('url', url); // Exclude current page
+      .neq('url', url);
 
     if (pagesError) {
       logger.error('Error fetching existing pages:', pagesError);
