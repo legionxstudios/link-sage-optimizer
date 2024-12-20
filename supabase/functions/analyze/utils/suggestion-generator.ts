@@ -10,10 +10,11 @@ export function generateSuggestions(
 
   const suggestions = [];
   const usedUrls = new Set<string>();
+  const usedAnchorTexts = new Set<string>(); // Track used anchor texts
 
   // Process each keyword type with different relevance thresholds
   const keywordTypes = {
-    exact_match: 0.2,  // Lowered threshold to ensure we get suggestions
+    exact_match: 0.2,
     broad_match: 0.15,
     related_match: 0.1
   };
@@ -25,33 +26,52 @@ export function generateSuggestions(
 
     for (const keyword of keywordList) {
       // Extract the actual keyword from the format "keyword (density) - context"
-      const actualKeyword = keyword.split('(')[0].trim();
+      const actualKeyword = keyword.split('(')[0].trim().toLowerCase(); // Convert to lowercase for comparison
+      
+      // Skip if we've already used this anchor text
+      if (usedAnchorTexts.has(actualKeyword)) {
+        logger.info(`Skipping duplicate anchor text: "${actualKeyword}"`);
+        continue;
+      }
+
       logger.info(`Processing keyword: "${actualKeyword}"`);
       
       // Find matching pages for this keyword
       const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls);
       logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
       
-      for (const matchingPage of matchingPages) {
-        if (suggestions.length >= 20) break; // Increased limit from 10 to 20
-        
-        const relevanceScore = calculateRelevanceScore(actualKeyword, matchingPage);
-        logger.info(`Relevance score for "${actualKeyword}" -> ${matchingPage.url}: ${relevanceScore}`);
+      // Find the best matching page for this keyword
+      let bestMatch = null;
+      let bestScore = 0;
 
-        if (relevanceScore > threshold) { // Using dynamic threshold based on match type
-          suggestions.push({
-            suggestedAnchorText: actualKeyword,
-            targetUrl: matchingPage.url,
-            targetTitle: matchingPage.title || '',
-            context: extractContext(matchingPage.content || '', actualKeyword),
-            matchType: matchType,
-            relevanceScore: relevanceScore
-          });
-          
-          // Track used URL to avoid duplicates
-          usedUrls.add(matchingPage.url);
-          logger.info(`Added suggestion for "${actualKeyword}" -> ${matchingPage.url}`);
+      for (const page of matchingPages) {
+        const score = calculateRelevanceScore(actualKeyword, page);
+        if (score > bestScore && score > threshold) {
+          bestScore = score;
+          bestMatch = page;
         }
+      }
+
+      if (bestMatch && !usedUrls.has(bestMatch.url)) {
+        suggestions.push({
+          suggestedAnchorText: keyword.split('(')[0].trim(), // Use original case for display
+          targetUrl: bestMatch.url,
+          targetTitle: bestMatch.title || '',
+          context: extractContext(bestMatch.content || '', actualKeyword),
+          matchType: matchType,
+          relevanceScore: bestScore
+        });
+        
+        // Track used URL and anchor text
+        usedUrls.add(bestMatch.url);
+        usedAnchorTexts.add(actualKeyword);
+        logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url}`);
+      }
+
+      // Break if we have enough suggestions
+      if (suggestions.length >= 20) {
+        logger.info('Reached maximum suggestion count');
+        break;
       }
     }
   }
