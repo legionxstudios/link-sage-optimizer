@@ -3,6 +3,7 @@ import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
 import { isValidContentUrl } from "./url-filters.ts";
 import { calculateRelevanceScore } from "../scoring/relevance-calculator.ts";
 import { extractContext } from "./scoring.ts";
+import { sortSuggestions } from "./sorting.ts";
 
 export function generateSuggestions({
   keywords,
@@ -109,8 +110,11 @@ export function generateSuggestions({
       }
     }
 
-    logger.info(`Generated ${suggestions.length} total suggestions`);
-    return suggestions;
+    // Sort suggestions consistently before returning
+    const sortedSuggestions = sortSuggestions(suggestions);
+    logger.info(`Generated ${sortedSuggestions.length} total suggestions`);
+    return sortedSuggestions;
+    
   } catch (error) {
     logger.error('Error in suggestion generation:', error);
     throw error;
