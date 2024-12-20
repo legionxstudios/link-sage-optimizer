@@ -5,12 +5,13 @@ import { extractContext } from "./scoring.ts";
 import { sortSuggestions } from "./sorting.ts";
 import { SUGGESTION_LIMITS } from "./constants.ts";
 import { filterMatchingPages } from "./filters.ts";
+import { supabase } from "../db.ts";
 
-export function generateSuggestions({
+export async function generateSuggestions({
   keywords,
   existingPages,
   sourceUrl
-}: SuggestionGeneratorOptions): Suggestion[] {
+}: SuggestionGeneratorOptions): Promise<Suggestion[]> {
   try {
     logger.info('Starting suggestion generation with keywords:', keywords);
     logger.info(`Working with ${existingPages.length} existing pages`);
@@ -53,28 +54,63 @@ export function generateSuggestions({
           continue;
         }
 
-        // Find matching pages using the filter function
+        // Fetch page data from database for matching URLs
         const matchingPages = filterMatchingPages(actualKeyword, existingPages, usedUrls, sourceDomain);
         logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
-        
+
         // Find the best matching page
         let bestMatch = null;
         let bestScore = 0;
 
         for (const page of matchingPages) {
-          const score = calculateRelevanceScore(actualKeyword, page);
+          if (!page.url) continue;
+
+          // Fetch full page data from database
+          const { data: pageData, error } = await supabase
+            .from('pages')
+            .select('url, title, content')
+            .eq('url', page.url)
+            .single();
+
+          if (error) {
+            logger.error(`Error fetching page data for ${page.url}:`, error);
+            continue;
+          }
+
+          if (!pageData) {
+            logger.warn(`No page data found for ${page.url}`);
+            continue;
+          }
+
+          logger.info(`Retrieved page data for ${page.url}:`, {
+            title: pageData.title,
+            contentLength: pageData.content?.length || 0
+          });
+
+          const score = calculateRelevanceScore(actualKeyword, {
+            url: page.url,
+            title: pageData.title || '',
+            content: pageData.content || ''
+          });
+
+          logger.info(`Calculated score for ${page.url}: ${score}`);
+
           if (score > bestScore && score >= threshold) {
             bestScore = score;
-            bestMatch = page;
+            bestMatch = {
+              url: page.url,
+              title: pageData.title || '',
+              content: pageData.content || ''
+            };
           }
         }
 
-        if (bestMatch && bestMatch.url && !usedUrls.has(bestMatch.url)) {
+        if (bestMatch && !usedUrls.has(bestMatch.url)) {
           suggestions.push({
             suggestedAnchorText: keyword.split('(')[0].trim(),
             targetUrl: bestMatch.url,
-            targetTitle: bestMatch.title || '',
-            context: extractContext(bestMatch.content || '', actualKeyword),
+            targetTitle: bestMatch.title,
+            context: extractContext(bestMatch.content, actualKeyword),
             matchType: matchType,
             relevanceScore: bestScore
           });
