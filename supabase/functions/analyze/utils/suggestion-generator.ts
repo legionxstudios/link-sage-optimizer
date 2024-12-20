@@ -130,24 +130,59 @@ function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
   let score = 0;
   const keywordLower = keyword.toLowerCase();
   
-  // Check URL slug (highest weight)
+  // Theme-based scoring (highest weight - 0.4)
+  if (page.metadata?.detected_themes) {
+    const themes = page.metadata.detected_themes as string[];
+    const themeScore = calculateThemeScore(keywordLower, themes);
+    score += themeScore * 0.4;
+    logger.info(`Theme score for "${keyword}": ${themeScore}`);
+  }
+  
+  // URL slug relevance (0.3 weight)
   const urlSlug = new URL(page.url).pathname.toLowerCase();
   if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
-    score += 0.4;
-  }
-  
-  // Check title (medium weight)
-  if (page.title?.toLowerCase().includes(keywordLower)) {
     score += 0.3;
+    logger.info(`URL match found for "${keyword}"`);
   }
   
-  // Check content (lower weight)
+  // Title relevance (0.2 weight)
+  if (page.title?.toLowerCase().includes(keywordLower)) {
+    score += 0.2;
+    logger.info(`Title match found for "${keyword}"`);
+  }
+  
+  // Content relevance and frequency (0.1 weight)
   if (page.content?.toLowerCase().includes(keywordLower)) {
     const frequency = (page.content.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
-    score += Math.min(0.3, frequency * 0.05); // Cap content score at 0.3
+    const normalizedFrequency = Math.min(frequency / 10, 1); // Normalize frequency, cap at 10 occurrences
+    score += normalizedFrequency * 0.1;
+    logger.info(`Content frequency score for "${keyword}": ${normalizedFrequency}`);
   }
   
+  logger.info(`Final relevance score for "${keyword}": ${score}`);
   return Math.min(1.0, score);
+}
+
+function calculateThemeScore(keyword: string, themes: string[]): number {
+  // If no themes are available, return a neutral score
+  if (!themes || themes.length === 0) {
+    return 0.5;
+  }
+
+  // Calculate how many themes contain the keyword or vice versa
+  let themeMatches = 0;
+  for (const theme of themes) {
+    const themeLower = theme.toLowerCase();
+    if (themeLower.includes(keyword) || keyword.includes(themeLower)) {
+      themeMatches++;
+    }
+  }
+
+  // Calculate score based on theme matches
+  const themeScore = themeMatches / themes.length;
+  logger.info(`Theme matches for "${keyword}": ${themeMatches}/${themes.length}`);
+  
+  return themeScore;
 }
 
 function extractContext(content: string, keyword: string): string {
