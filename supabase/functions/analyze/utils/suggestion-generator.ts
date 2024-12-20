@@ -5,8 +5,9 @@ export function generateSuggestions(
   keywords: { [key: string]: string[] },
   existingPages: ExistingPage[]
 ) {
-  logger.info('Generating suggestions from keywords:', keywords);
+  logger.info('Starting suggestion generation with keywords:', keywords);
   logger.info(`Working with ${existingPages.length} existing pages`);
+  logger.debug('First few existing pages:', existingPages.slice(0, 3));
 
   const suggestions = [];
   const usedUrls = new Set<string>();
@@ -19,83 +20,79 @@ export function generateSuggestions(
       logger.info(`Analyzing keyword: "${keyword}"`);
       
       // Find best matching page for this keyword
-      const matchingPage = findBestMatchingPage(keyword, existingPages, usedUrls);
+      const matchingPages = findMatchingPages(keyword, existingPages, usedUrls);
+      logger.info(`Found ${matchingPages.length} potential matches for "${keyword}"`);
       
-      if (matchingPage) {
-        logger.info(`Found matching page for "${keyword}": ${matchingPage.url}`);
+      for (const matchingPage of matchingPages) {
+        if (suggestions.length >= 10) break; // Limit to top 10 suggestions
         
-        suggestions.push({
-          suggestedAnchorText: keyword,
-          targetUrl: matchingPage.url,
-          targetTitle: matchingPage.title || '',
-          context: `The source content contains "${keyword}" which is relevant to the target page about ${matchingPage.title}`,
-          matchType: matchType,
-          relevanceScore: calculateRelevanceScore(keyword, matchingPage)
-        });
-        
-        // Track used URL to avoid duplicates
-        usedUrls.add(matchingPage.url);
-      } else {
-        logger.info(`No matching page found for keyword: "${keyword}"`);
+        const relevanceScore = calculateRelevanceScore(keyword, matchingPage);
+        logger.info(`Relevance score for "${keyword}" -> ${matchingPage.url}: ${relevanceScore}`);
+
+        if (relevanceScore > 0.3) { // Lowered threshold from 0.5 to 0.3
+          suggestions.push({
+            suggestedAnchorText: keyword,
+            targetUrl: matchingPage.url,
+            targetTitle: matchingPage.title || '',
+            context: `Content contains "${keyword}" which is relevant to the target page about ${matchingPage.title}`,
+            matchType: matchType,
+            relevanceScore
+          });
+          
+          // Track used URL to avoid duplicates
+          usedUrls.add(matchingPage.url);
+          logger.info(`Added suggestion for "${keyword}" -> ${matchingPage.url}`);
+        }
       }
     }
   }
 
   logger.info(`Generated ${suggestions.length} total suggestions`);
+  logger.debug('Final suggestions:', suggestions);
   return suggestions;
 }
 
-function findBestMatchingPage(
+function findMatchingPages(
   keyword: string, 
   existingPages: ExistingPage[], 
   usedUrls: Set<string>
-): ExistingPage | null {
-  logger.info(`Finding best match for keyword "${keyword}" among ${existingPages.length} pages`);
+): ExistingPage[] {
+  const keywordLower = keyword.toLowerCase();
   
-  const validPages = existingPages.filter(page => 
-    page.url && 
-    page.content &&
-    !usedUrls.has(page.url) &&
-    !page.url.includes('/wp-content/') &&
-    !page.url.includes('/cart') &&
-    !page.url.includes('/checkout') &&
-    !page.url.includes('/my-account') &&
-    !page.url.match(/\.(jpg|jpeg|png|gif|css|js)$/)
-  );
-
-  logger.info(`Found ${validPages.length} valid pages to check`);
-
-  // Sort pages by relevance to keyword
-  const scoredPages = validPages.map(page => ({
-    page,
-    score: calculateRelevanceScore(keyword, page)
-  }));
-
-  // Sort by score descending
-  scoredPages.sort((a, b) => b.score - a.score);
-
-  if (scoredPages.length > 0 && scoredPages[0].score > 0.5) {
-    logger.info(`Best matching page for "${keyword}": ${scoredPages[0].page.url} (score: ${scoredPages[0].score})`);
-    return scoredPages[0].page;
-  }
-
-  logger.info(`No suitable match found for keyword "${keyword}"`);
-  return null;
+  return existingPages.filter(page => {
+    // Skip already used URLs and invalid pages
+    if (!page.url || usedUrls.has(page.url)) return false;
+    
+    // Skip non-content pages
+    if (page.url.includes('/wp-content/') ||
+        page.url.includes('/cart') ||
+        page.url.includes('/checkout') ||
+        page.url.includes('/my-account') ||
+        page.url.match(/\.(jpg|jpeg|png|gif|css|js)$/)) {
+      return false;
+    }
+    
+    // Check if keyword appears in title or content
+    const titleMatch = page.title?.toLowerCase().includes(keywordLower);
+    const contentMatch = page.content?.toLowerCase().includes(keywordLower);
+    
+    return titleMatch || contentMatch;
+  });
 }
 
 function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
   let score = 0;
   const keywordLower = keyword.toLowerCase();
   
-  // Check title
+  // Check title (higher weight for title matches)
   if (page.title?.toLowerCase().includes(keywordLower)) {
-    score += 0.5;
+    score += 0.6;
   }
   
   // Check content
   if (page.content?.toLowerCase().includes(keywordLower)) {
     const frequency = (page.content.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
-    score += Math.min(0.5, frequency * 0.1);
+    score += Math.min(0.4, frequency * 0.1); // Cap content score at 0.4
   }
   
   return Math.min(1.0, score);
