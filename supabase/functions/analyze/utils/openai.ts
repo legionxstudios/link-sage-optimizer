@@ -14,17 +14,17 @@ export async function analyzeWithOpenAI(
       throw new Error('OpenAI API key is not configured');
     }
 
-    logger.info('Starting OpenAI analysis...');
-    logger.info(`Analyzing content with ${existingPages.length} existing pages`);
-    logger.debug('Sample of existing pages:', existingPages.slice(0, 3));
+    logger.info('Starting OpenAI analysis with full page set...');
+    logger.info(`Processing ${existingPages.length} existing pages`);
+    logger.info('Sample URLs being processed:', existingPages.slice(0, 5).map(p => p.url));
 
     // Extract keywords using OpenAI
     const keywords = await extractKeywords(content, openAIApiKey);
     logger.info('Extracted keywords:', keywords);
 
-    // Generate link suggestions based on keywords and existing pages
+    // Generate link suggestions based on keywords and ALL existing pages
     const suggestions = await generateSuggestions(keywords, existingPages);
-    logger.info(`Generated ${suggestions.length} suggestions`);
+    logger.info(`Generated ${suggestions.length} suggestions from ${existingPages.length} pages`);
     
     return {
       keywords,

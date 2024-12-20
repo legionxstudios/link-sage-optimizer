@@ -22,7 +22,6 @@ serve(async (req) => {
       throw new Error('URL is required');
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -36,7 +35,7 @@ serve(async (req) => {
     const { title, content } = await extractContent(url);
     logger.info('Content extracted successfully', { title });
 
-    // Get existing pages from the same website
+    // Get existing pages from the same website with detailed logging
     const domain = new URL(url).hostname;
     logger.info('Looking up website for domain:', domain);
 
@@ -51,8 +50,8 @@ serve(async (req) => {
       throw new Error(`Database error: ${websiteError.message}`);
     }
 
-    // Get all pages for this website
-    logger.info('Fetching existing pages for website:', websiteData.id);
+    // Get ALL pages for this website
+    logger.info('Fetching ALL existing pages for website:', websiteData.id);
     const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
@@ -64,12 +63,17 @@ serve(async (req) => {
       throw new Error('Failed to fetch existing pages');
     }
 
-    logger.info(`Found ${existingPages?.length || 0} existing pages to analyze`);
-    logger.debug('Sample of existing pages:', existingPages?.slice(0, 3));
+    // Log detailed information about fetched pages
+    logger.info(`Found ${existingPages?.length || 0} total existing pages to analyze`);
+    logger.info('URL patterns found:', existingPages?.map(p => new URL(p.url).pathname));
 
-    // Analyze with OpenAI
+    // Wait for all pages to be processed before proceeding
+    logger.info('Starting OpenAI analysis with all pages');
     const analysis = await analyzeWithOpenAI(content, existingPages || []);
-    logger.info('Analysis completed:', analysis);
+    logger.info('Analysis completed with full page set:', {
+      keywordCount: Object.keys(analysis.keywords || {}).length,
+      suggestionCount: analysis.outboundSuggestions?.length || 0
+    });
 
     // Store analysis results
     const { error: analysisError } = await supabase
@@ -92,6 +96,7 @@ serve(async (req) => {
     }
 
     logger.info('Analysis results stored successfully');
+    logger.info('Final analysis output:', analysis);
 
     return new Response(
       JSON.stringify(analysis),
