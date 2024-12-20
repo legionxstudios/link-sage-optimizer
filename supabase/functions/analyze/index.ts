@@ -15,31 +15,31 @@ serve(async (req) => {
   }
 
   try {
+    // Parse and validate request body
     const requestData = await req.json();
     logger.info('Received request data:', requestData);
 
-    if (!requestData || typeof requestData !== 'object') {
-      throw new Error('Invalid request body');
+    if (!requestData?.url) {
+      logger.error('Missing URL in request');
+      throw new Error('URL is required');
     }
 
-    const { url } = requestData;
-    logger.info('Extracted URL from request:', url);
-
-    if (!url || typeof url !== 'string') {
-      throw new Error('URL is required and must be a string');
-    }
+    const url = requestData.url;
+    logger.info('Processing URL:', url);
 
     // Validate URL format
     try {
       new URL(url);
     } catch (e) {
-      throw new Error(`Invalid URL format: '${url}'`);
+      logger.error(`Invalid URL format: ${url}`);
+      throw new Error(`Invalid URL format: ${url}`);
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseKey) {
+      logger.error('Missing Supabase configuration');
       throw new Error('Missing Supabase configuration');
     }
 
@@ -49,7 +49,7 @@ serve(async (req) => {
     const { title, content } = await extractContent(url);
     logger.info('Content extracted successfully', { title });
 
-    // Get existing pages from the same website with detailed logging
+    // Get website info
     const domain = new URL(url).hostname;
     logger.info('Looking up website for domain:', domain);
 
@@ -64,8 +64,13 @@ serve(async (req) => {
       throw new Error(`Database error: ${websiteError.message}`);
     }
 
-    // Get ALL pages for this website
-    logger.info('Fetching ALL existing pages for website:', websiteData.id);
+    if (!websiteData?.id) {
+      logger.error('No website found for domain:', domain);
+      throw new Error(`No website found for domain: ${domain}`);
+    }
+
+    // Get existing pages
+    logger.info('Fetching existing pages for website:', websiteData.id);
     const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
@@ -78,13 +83,13 @@ serve(async (req) => {
     }
 
     // Log detailed information about fetched pages
-    logger.info(`Found ${existingPages?.length || 0} total existing pages to analyze`);
+    logger.info(`Found ${existingPages?.length || 0} existing pages to analyze`);
     logger.info('URL patterns found:', existingPages?.map(p => new URL(p.url).pathname));
 
-    // Wait for all pages to be processed before proceeding
-    logger.info('Starting OpenAI analysis with all pages');
+    // Analyze content with OpenAI
+    logger.info('Starting OpenAI analysis');
     const analysis = await analyzeWithOpenAI(content, existingPages || [], url);
-    logger.info('Analysis completed with full page set:', {
+    logger.info('Analysis completed:', {
       keywordCount: Object.keys(analysis.keywords || {}).length,
       suggestionCount: analysis.outboundSuggestions?.length || 0
     });
