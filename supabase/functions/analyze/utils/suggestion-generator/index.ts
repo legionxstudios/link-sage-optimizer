@@ -1,7 +1,8 @@
 import { logger } from "../logger.ts";
 import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
 import { isValidContentUrl } from "./url-filters.ts";
-import { calculateRelevanceScore, extractContext } from "./scoring.ts";
+import { validateContent, extractContext } from "./content-validator.ts";
+import { calculateRelevanceScore } from "./scoring.ts";
 
 export function generateSuggestions({
   keywords,
@@ -10,23 +11,20 @@ export function generateSuggestions({
   sourceContent
 }: SuggestionGeneratorOptions): Suggestion[] {
   try {
-    logger.info('Starting suggestion generation with keywords:', keywords);
-    logger.info(`Working with ${existingPages.length} existing pages`);
-
+    logger.info('Starting suggestion generation');
+    
+    // Validate required inputs
     if (!sourceUrl) {
-      logger.error('Source URL is undefined');
       throw new Error('Source URL is required for suggestion generation');
     }
-
-    if (!sourceContent) {
-      logger.error('Source content is undefined');
-      throw new Error('Source content is required for context extraction');
-    }
-
+    
+    const validContent = validateContent(sourceContent);
+    
     if (!isValidContentUrl(sourceUrl)) {
-      logger.error('Invalid source URL provided:', sourceUrl);
       throw new Error('Invalid source URL provided');
     }
+
+    logger.info(`Working with ${existingPages.length} existing pages`);
 
     const suggestions: Suggestion[] = [];
     const usedUrls = new Set<string>();
@@ -47,7 +45,7 @@ export function generateSuggestions({
     // Process each keyword type
     for (const [matchType, threshold] of Object.entries(keywordTypes)) {
       const keywordList = keywords[matchType as keyof typeof keywords] || [];
-      logger.info(`Processing ${keywordList.length} ${matchType} keywords with threshold ${threshold}`);
+      logger.info(`Processing ${keywordList.length} ${matchType} keywords`);
 
       for (const keyword of keywordList) {
         if (!keyword) {
@@ -63,9 +61,9 @@ export function generateSuggestions({
         }
 
         // Find the context in the source content first
-        const context = extractContext(sourceContent, actualKeyword);
+        const context = extractContext(validContent, actualKeyword);
         if (!context) {
-          logger.info(`No valid context found for keyword "${actualKeyword}" in source content`);
+          logger.info(`No valid context found for keyword "${actualKeyword}"`);
           continue;
         }
 
@@ -81,11 +79,8 @@ export function generateSuggestions({
             const urlSlug = new URL(page.url).pathname.toLowerCase();
             const keywordLower = actualKeyword.toLowerCase();
             
-            if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
-              return true;
-            }
-            
-            return page.title?.toLowerCase().includes(keywordLower) ||
+            return urlSlug.includes(keywordLower.replace(/\s+/g, '-')) ||
+                   page.title?.toLowerCase().includes(keywordLower) ||
                    page.content?.toLowerCase().includes(keywordLower);
           } catch (error) {
             logger.error(`Error processing page URL ${page.url}:`, error);
@@ -119,7 +114,7 @@ export function generateSuggestions({
           
           usedUrls.add(bestMatch.url);
           usedAnchorTexts.add(actualKeyword.toLowerCase());
-          logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url} (score: ${bestScore})`);
+          logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url}`);
         }
 
         if (suggestions.length >= 20) {
