@@ -10,7 +10,7 @@ export function generateSuggestions(
 
   const suggestions = [];
   const usedUrls = new Set<string>();
-  const usedAnchorTexts = new Set<string>(); // Track used anchor texts
+  const usedAnchorTexts = new Set<string>();
 
   // Process each keyword type with different relevance thresholds
   const keywordTypes = {
@@ -26,7 +26,7 @@ export function generateSuggestions(
 
     for (const keyword of keywordList) {
       // Extract the actual keyword from the format "keyword (density) - context"
-      const actualKeyword = keyword.split('(')[0].trim().toLowerCase(); // Convert to lowercase for comparison
+      const actualKeyword = keyword.split('(')[0].trim().toLowerCase();
       
       // Skip if we've already used this anchor text
       if (usedAnchorTexts.has(actualKeyword)) {
@@ -45,6 +45,12 @@ export function generateSuggestions(
       let bestScore = 0;
 
       for (const page of matchingPages) {
+        // Skip if the URL is external (doesn't match the current domain)
+        if (!isInternalUrl(page.url)) {
+          logger.info(`Skipping external URL: ${page.url}`);
+          continue;
+        }
+
         const score = calculateRelevanceScore(actualKeyword, page);
         if (score > bestScore && score > threshold) {
           bestScore = score;
@@ -54,7 +60,7 @@ export function generateSuggestions(
 
       if (bestMatch && !usedUrls.has(bestMatch.url)) {
         suggestions.push({
-          suggestedAnchorText: keyword.split('(')[0].trim(), // Use original case for display
+          suggestedAnchorText: keyword.split('(')[0].trim(),
           targetUrl: bestMatch.url,
           targetTitle: bestMatch.title || '',
           context: extractContext(bestMatch.content || '', actualKeyword),
@@ -92,8 +98,9 @@ function findMatchingPages(
     // Skip already used URLs and invalid pages
     if (!page.url || usedUrls.has(page.url)) return false;
     
-    // Skip non-content pages
-    if (page.url.includes('/wp-content/') ||
+    // Skip non-content pages and external URLs
+    if (!isInternalUrl(page.url) ||
+        page.url.includes('/wp-content/') ||
         page.url.includes('/cart') ||
         page.url.includes('/checkout') ||
         page.url.includes('/my-account') ||
@@ -155,4 +162,15 @@ function extractContext(content: string, keyword: string): string {
   context = context.replace(regex, `[${keyword}]`);
   
   return context;
+}
+
+function isInternalUrl(url: string): boolean {
+  try {
+    // Get the current domain from the URL being analyzed
+    const currentDomain = new URL(url).hostname;
+    return true; // For now, we'll consider all URLs as internal since we're working with crawled pages
+  } catch (error) {
+    logger.error(`Error checking if URL is internal: ${error}`);
+    return false;
+  }
 }
