@@ -28,13 +28,13 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
   const getMatchTypeLabel = (type: string) => {
     switch (type) {
       case 'seo_optimized':
-        return <Badge variant="default" className="bg-accent/20 text-primary border-0">SEO Optimized</Badge>;
+        return <Badge variant="default">SEO Optimized</Badge>;
       case 'keyword_based':
-        return <Badge variant="secondary" className="bg-white/50 text-primary border-0">Keyword Based</Badge>;
+        return <Badge variant="secondary">Keyword Based</Badge>;
       case 'theme_based':
-        return <Badge variant="outline" className="bg-white/30 text-primary border-white/20">Theme Based</Badge>;
+        return <Badge variant="outline">Theme Based</Badge>;
       default:
-        return <Badge variant="outline" className="bg-white/30 text-primary border-white/20">{type}</Badge>;
+        return <Badge variant="outline">{type}</Badge>;
     }
   };
 
@@ -51,61 +51,59 @@ export const LinkSuggestions = ({ suggestions }: LinkSuggestionsProps) => {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl overflow-hidden bg-white/50 backdrop-blur-sm border border-white/20">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-white/5 border-white/20">
-              <TableHead className="text-gray-700">Suggested Link Text</TableHead>
-              <TableHead className="text-gray-700">Target URL</TableHead>
-              <TableHead className="text-gray-700">Match Type</TableHead>
-              <TableHead className="text-gray-700">Relevance</TableHead>
-              <TableHead className="text-gray-700">Context</TableHead>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Suggested Link Text</TableHead>
+            <TableHead>Target URL</TableHead>
+            <TableHead>Match Type</TableHead>
+            <TableHead>Relevance</TableHead>
+            <TableHead>Context</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {suggestions.map((suggestion, index) => (
+            <TableRow key={index}>
+              <TableCell>
+                <span className="font-medium">{suggestion.suggestedAnchorText}</span>
+              </TableCell>
+              <TableCell>
+                {suggestion.targetUrl ? (
+                  <a 
+                    href={suggestion.targetUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                  >
+                    {formatUrl(suggestion.targetUrl)}
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">No URL available</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {getMatchTypeLabel(suggestion.matchType)}
+              </TableCell>
+              <TableCell>
+                <span className={getRelevanceColor(suggestion.relevanceScore)}>
+                  {Math.round(suggestion.relevanceScore * 100)}%
+                </span>
+              </TableCell>
+              <TableCell className="max-w-[400px]">
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help text-left">
+                    <span className="line-clamp-2">{suggestion.context}</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[500px] p-4">
+                    <p className="whitespace-pre-wrap">{suggestion.context}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {suggestions.map((suggestion, index) => (
-              <TableRow key={index} className="hover:bg-white/5 border-white/20">
-                <TableCell className="font-medium">
-                  {suggestion.suggestedAnchorText}
-                </TableCell>
-                <TableCell>
-                  {suggestion.targetUrl ? (
-                    <a 
-                      href={suggestion.targetUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
-                    >
-                      {formatUrl(suggestion.targetUrl)}
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  ) : (
-                    <span className="text-muted-foreground">No URL available</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {getMatchTypeLabel(suggestion.matchType)}
-                </TableCell>
-                <TableCell>
-                  <span className={getRelevanceColor(suggestion.relevanceScore)}>
-                    {Math.round(suggestion.relevanceScore * 100)}%
-                  </span>
-                </TableCell>
-                <TableCell className="max-w-[400px]">
-                  <Tooltip>
-                    <TooltipTrigger className="cursor-help text-left">
-                      <span className="line-clamp-2">{suggestion.context}</span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-[500px] p-4">
-                      <p className="whitespace-pre-wrap">{suggestion.context}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 };

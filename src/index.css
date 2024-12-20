@@ -4,7 +4,7 @@
  
 @layer base {
   :root {
-    --background: 48 33% 97%;
+    --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 3.9%;
@@ -16,14 +16,14 @@
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
-    --accent: 48 100% 50%;
+    --accent: 240 4.8% 95.9%;
     --accent-foreground: 240 5.9% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
     --ring: 240 5.9% 10%;
-    --radius: 1rem;
+    --radius: 0.75rem;
   }
 }
 
@@ -32,13 +32,12 @@
     @apply border-border;
   }
   body {
-    @apply bg-[#f5f3ee] text-foreground antialiased min-h-screen;
-    background: linear-gradient(135deg, #fdfcfb 0%, #f5f3ee 100%);
+    @apply bg-background text-foreground antialiased;
   }
 }
 
 .glass-card {
-  @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-lg rounded-2xl;
+  @apply bg-white/30 backdrop-blur-md border border-white/20 shadow-lg;
 }
 
 .shimmer {
