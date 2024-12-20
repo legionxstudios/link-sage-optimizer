@@ -4,6 +4,7 @@ import { isValidContentUrl } from "./url-filters.ts";
 import { calculateRelevanceScore } from "../scoring/relevance-calculator.ts";
 import { extractContext } from "./scoring.ts";
 import { sortSuggestions } from "./sorting.ts";
+import { SUGGESTION_LIMITS } from "./constants.ts";
 
 export function generateSuggestions({
   keywords,
@@ -19,7 +20,6 @@ export function generateSuggestions({
       throw new Error('Source URL is required for suggestion generation');
     }
 
-    // Get the domain from the source URL
     const sourceDomain = new URL(sourceUrl).hostname;
     logger.info(`Using source domain for internal links: ${sourceDomain}`);
 
@@ -27,19 +27,20 @@ export function generateSuggestions({
     const usedUrls = new Set<string>();
     const usedAnchorTexts = new Set<string>();
 
-    // Process each keyword type with different relevance thresholds
-    const keywordTypes = {
-      exact_match: 0.3,
-      broad_match: 0.25,
-      related_match: 0.2
-    };
-
     // Process each keyword type
-    for (const [matchType, threshold] of Object.entries(keywordTypes)) {
+    for (const [matchType, threshold] of Object.entries(SUGGESTION_LIMITS.MATCH_TYPE_THRESHOLDS)) {
+      if (suggestions.length >= SUGGESTION_LIMITS.MAX_SUGGESTIONS) {
+        break;
+      }
+
       const keywordList = keywords[matchType as keyof typeof keywords] || [];
       logger.info(`Processing ${keywordList.length} ${matchType} keywords with threshold ${threshold}`);
 
       for (const keyword of keywordList) {
+        if (suggestions.length >= SUGGESTION_LIMITS.MAX_SUGGESTIONS) {
+          break;
+        }
+
         if (!keyword) {
           logger.warn('Skipping empty keyword');
           continue;
@@ -82,7 +83,7 @@ export function generateSuggestions({
 
         for (const page of matchingPages) {
           const score = calculateRelevanceScore(actualKeyword, page);
-          if (score > bestScore && score > threshold) {
+          if (score > bestScore && score >= SUGGESTION_LIMITS.MIN_RELEVANCE_SCORE) {
             bestScore = score;
             bestMatch = page;
           }
@@ -102,18 +103,12 @@ export function generateSuggestions({
           usedAnchorTexts.add(actualKeyword);
           logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url} (score: ${bestScore})`);
         }
-
-        if (suggestions.length >= 20) {
-          logger.info('Reached maximum suggestion count');
-          break;
-        }
       }
     }
 
-    // Sort suggestions consistently before returning
     const sortedSuggestions = sortSuggestions(suggestions);
     logger.info(`Generated ${sortedSuggestions.length} total suggestions`);
-    return sortedSuggestions;
+    return sortedSuggestions.slice(0, SUGGESTION_LIMITS.MAX_SUGGESTIONS);
     
   } catch (error) {
     logger.error('Error in suggestion generation:', error);
