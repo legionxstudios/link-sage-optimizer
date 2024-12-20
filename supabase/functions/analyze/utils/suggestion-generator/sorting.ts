@@ -1,5 +1,5 @@
-import { Suggestion } from "./types";
-import { logger } from "../logger";
+import { Suggestion } from "./types.ts";
+import { logger } from "../logger.ts";
 
 export function sortSuggestions(suggestions: Suggestion[]): Suggestion[] {
   try {
