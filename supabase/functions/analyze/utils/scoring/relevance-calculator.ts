@@ -17,8 +17,8 @@ export function calculateRelevanceScore(keyword: string, page: ExistingPage): nu
     
     // Calculate individual component scores
     const urlScore = calculateUrlScore(keyword, page.url);
-    const titleScore = calculateTitleScore(keyword, page.title);
-    const contentScore = calculateContentScore(keyword, page.content);
+    const titleScore = calculateTitleScore(keyword, page.title || '');
+    const contentScore = calculateContentScore(keyword, page.content || '');
     
     // Calculate weighted final score
     const finalScore = (
@@ -27,11 +27,13 @@ export function calculateRelevanceScore(keyword: string, page: ExistingPage): nu
       contentScore * WEIGHTS.content
     );
     
-    logger.info(`Final relevance scores for "${keyword}":`, {
+    logger.info(`Relevance scores for "${keyword}":`, {
       url: urlScore,
       title: titleScore,
       content: contentScore,
-      final: finalScore
+      final: finalScore,
+      pageTitle: page.title?.substring(0, 50),
+      contentLength: page.content?.length || 0
     });
     
     return Math.min(1.0, finalScore);

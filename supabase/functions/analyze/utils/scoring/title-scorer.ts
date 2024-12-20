@@ -1,7 +1,8 @@
 import { logger } from "../logger.ts";
 
-export function calculateTitleScore(keyword: string, title: string | undefined): number {
+export function calculateTitleScore(keyword: string, title: string): number {
   if (!title) {
+    logger.debug(`No title provided for keyword "${keyword}"`);
     return 0;
   }
 

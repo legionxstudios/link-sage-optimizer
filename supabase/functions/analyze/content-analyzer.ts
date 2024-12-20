@@ -37,7 +37,7 @@ export async function extractContent(url: string) {
       doc.querySelectorAll(tag).forEach(el => el.remove());
     });
 
-    const title = doc.querySelector('title')?.textContent || '';
+    const title = doc.querySelector('title')?.textContent?.trim() || '';
     logger.info('Extracted title:', title);
     
     const mainContent = extractMainContent(doc);
@@ -46,6 +46,13 @@ export async function extractContent(url: string) {
     
     const links = extractLinks(doc, url);
     logger.info('Extracted links count:', links.length);
+
+    // Log the extracted data for debugging
+    logger.info('Extracted page data:', {
+      title,
+      contentLength: mainContent.length,
+      linksCount: links.length
+    });
 
     return {
       title,

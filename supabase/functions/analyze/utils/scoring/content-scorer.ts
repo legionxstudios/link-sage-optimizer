@@ -1,7 +1,8 @@
 import { logger } from "../logger.ts";
 
-export function calculateContentScore(keyword: string, content: string | undefined): number {
+export function calculateContentScore(keyword: string, content: string): number {
   if (!content) {
+    logger.debug(`No content provided for keyword "${keyword}"`);
     return 0;
   }
 
@@ -32,7 +33,8 @@ export function calculateContentScore(keyword: string, content: string | undefin
     density: `${(density).toFixed(2)}%`,
     densityScore,
     isProminent,
-    finalScore
+    finalScore,
+    contentLength: content.length
   });
   
   return finalScore;
