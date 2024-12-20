@@ -1,5 +1,6 @@
-import { ExistingPage } from "./types.ts";
-import { logger } from "./logger.ts";
+import { ExistingPage } from "./types";
+import { logger } from "./logger";
+import { calculateRelevanceScore } from "./scoring/relevance-calculator";
 
 export function generateSuggestions(
   keywords: { [key: string]: string[] },
@@ -31,7 +32,6 @@ export function generateSuggestions(
     for (const keyword of keywordList) {
       const actualKeyword = keyword.split('(')[0].trim().toLowerCase();
       
-      // Skip if we've already used this anchor text
       if (usedAnchorTexts.has(actualKeyword)) {
         logger.info(`Skipping duplicate anchor text: "${actualKeyword}"`);
         continue;
@@ -48,7 +48,6 @@ export function generateSuggestions(
       let bestScore = 0;
 
       for (const page of matchingPages) {
-        // Skip if the URL is external
         if (!isInternalUrl(page.url, internalDomains)) {
           logger.info(`Skipping external URL: ${page.url}`);
           continue;
@@ -71,13 +70,11 @@ export function generateSuggestions(
           relevanceScore: bestScore
         });
         
-        // Track used URL and anchor text
         usedUrls.add(bestMatch.url);
         usedAnchorTexts.add(actualKeyword);
-        logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url}`);
+        logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url} (score: ${bestScore})`);
       }
 
-      // Break if we have enough suggestions
       if (suggestions.length >= 20) {
         logger.info('Reached maximum suggestion count');
         break;
@@ -86,7 +83,6 @@ export function generateSuggestions(
   }
 
   logger.info(`Generated ${suggestions.length} total suggestions`);
-  logger.debug('Final suggestions:', suggestions);
   return suggestions;
 }
 
@@ -99,10 +95,8 @@ function findMatchingPages(
   const keywordLower = keyword.toLowerCase();
   
   return existingPages.filter(page => {
-    // Skip already used URLs and invalid pages
     if (!page.url || usedUrls.has(page.url)) return false;
     
-    // Skip non-content pages and external URLs
     if (!isInternalUrl(page.url, internalDomains) ||
         page.url.includes('/wp-content/') ||
         page.url.includes('/cart') ||
@@ -112,77 +106,14 @@ function findMatchingPages(
       return false;
     }
     
-    // Check if keyword appears in URL slug
     const urlSlug = new URL(page.url).pathname.toLowerCase();
     if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
       return true;
     }
     
-    // Check if keyword appears in title or content
-    const titleMatch = page.title?.toLowerCase().includes(keywordLower);
-    const contentMatch = page.content?.toLowerCase().includes(keywordLower);
-    
-    return titleMatch || contentMatch;
+    return page.title?.toLowerCase().includes(keywordLower) ||
+           page.content?.toLowerCase().includes(keywordLower);
   });
-}
-
-function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
-  let score = 0;
-  const keywordLower = keyword.toLowerCase();
-  
-  // Theme-based scoring (highest weight - 0.4)
-  if (page.metadata?.detected_themes) {
-    const themes = page.metadata.detected_themes as string[];
-    const themeScore = calculateThemeScore(keywordLower, themes);
-    score += themeScore * 0.4;
-    logger.info(`Theme score for "${keyword}": ${themeScore}`);
-  }
-  
-  // URL slug relevance (0.3 weight)
-  const urlSlug = new URL(page.url).pathname.toLowerCase();
-  if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
-    score += 0.3;
-    logger.info(`URL match found for "${keyword}"`);
-  }
-  
-  // Title relevance (0.2 weight)
-  if (page.title?.toLowerCase().includes(keywordLower)) {
-    score += 0.2;
-    logger.info(`Title match found for "${keyword}"`);
-  }
-  
-  // Content relevance and frequency (0.1 weight)
-  if (page.content?.toLowerCase().includes(keywordLower)) {
-    const frequency = (page.content.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
-    const normalizedFrequency = Math.min(frequency / 10, 1); // Normalize frequency, cap at 10 occurrences
-    score += normalizedFrequency * 0.1;
-    logger.info(`Content frequency score for "${keyword}": ${normalizedFrequency}`);
-  }
-  
-  logger.info(`Final relevance score for "${keyword}": ${score}`);
-  return Math.min(1.0, score);
-}
-
-function calculateThemeScore(keyword: string, themes: string[]): number {
-  // If no themes are available, return a neutral score
-  if (!themes || themes.length === 0) {
-    return 0.5;
-  }
-
-  // Calculate how many themes contain the keyword or vice versa
-  let themeMatches = 0;
-  for (const theme of themes) {
-    const themeLower = theme.toLowerCase();
-    if (themeLower.includes(keyword) || keyword.includes(themeLower)) {
-      themeMatches++;
-    }
-  }
-
-  // Calculate score based on theme matches
-  const themeScore = themeMatches / themes.length;
-  logger.info(`Theme matches for "${keyword}": ${themeMatches}/${themes.length}`);
-  
-  return themeScore;
 }
 
 function extractContext(content: string, keyword: string): string {
@@ -196,7 +127,6 @@ function extractContext(content: string, keyword: string): string {
   const end = Math.min(content.length, keywordIndex + keyword.length + 100);
   let context = content.slice(start, end).trim();
   
-  // Highlight the keyword in the context
   const regex = new RegExp(keyword, 'gi');
   context = context.replace(regex, `[${keyword}]`);
   
