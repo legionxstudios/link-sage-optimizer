@@ -1,42 +1,43 @@
 import { logger } from "../logger.ts";
-import { calculateThemeScore } from "./theme-scorer.ts";
-import { calculateContentScore } from "./content-scorer.ts";
-import { calculateUrlScore } from "./url-scorer.ts";
+import { calculateUrlRelevance } from "./url-relevance.ts";
+import { calculateContentRelevance } from "./content-relevance.ts";
+import { calculateTitleRelevance } from "./title-relevance.ts";
 import type { ExistingPage } from "../types.ts";
 
-const SCORE_WEIGHTS = {
-  theme: 0.4,    // Theme relevance (40%)
-  url: 0.3,      // URL relevance (30%)
-  title: 0.2,    // Title relevance (20%)
-  content: 0.1   // Content relevance (10%)
+// Scoring weights for different components
+const WEIGHTS = {
+  url: 0.3,     // URL relevance (30%)
+  title: 0.3,   // Title relevance (30%)
+  content: 0.4  // Content relevance (40%)
 } as const;
 
 export function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
-  let finalScore = 0;
-  
-  // Theme-based scoring (40%)
-  const themeScore = calculateThemeScore(keyword, page.metadata?.detected_themes);
-  finalScore += themeScore * SCORE_WEIGHTS.theme;
-  
-  // URL relevance (30%)
-  const urlScore = calculateUrlScore(keyword, page.url);
-  finalScore += urlScore * SCORE_WEIGHTS.url;
-  
-  // Title relevance (20%)
-  const titleScore = page.title ? calculateContentScore(keyword, page.title) : 0;
-  finalScore += titleScore * SCORE_WEIGHTS.title;
-  
-  // Content relevance (10%)
-  const contentScore = calculateContentScore(keyword, page.content);
-  finalScore += contentScore * SCORE_WEIGHTS.content;
-
-  logger.info(`Relevance scores for "${keyword}":`, {
-    theme: themeScore,
-    url: urlScore,
-    title: titleScore,
-    content: contentScore,
-    final: finalScore
-  });
-
-  return Math.min(1.0, finalScore);
+  try {
+    if (!page.url) return 0;
+    
+    // Calculate individual component scores
+    const urlScore = calculateUrlRelevance(keyword, page.url);
+    const titleScore = calculateTitleRelevance(keyword, page.title);
+    const contentScore = calculateContentRelevance(keyword, page.content);
+    
+    // Calculate weighted final score
+    const finalScore = (
+      urlScore * WEIGHTS.url +
+      titleScore * WEIGHTS.title +
+      contentScore * WEIGHTS.content
+    );
+    
+    logger.info(`Final relevance scores for "${keyword}":`, {
+      url: urlScore,
+      title: titleScore,
+      content: contentScore,
+      final: finalScore
+    });
+    
+    return Math.min(1.0, finalScore);
+    
+  } catch (error) {
+    logger.error(`Error calculating relevance score for "${keyword}":`, error);
+    return 0;
+  }
 }

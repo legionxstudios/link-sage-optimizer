@@ -1,54 +1,44 @@
 import { ExistingPage } from "../types.ts";
 import { logger } from "../logger.ts";
-import { isValidContentUrl } from "./url-filters.ts";
+import { calculateRelevanceScore } from "../scoring/relevance-calculator.ts";
 
-export function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
-  try {
-    let score = 0;
-    const keywordLower = keyword.toLowerCase();
-    
-    if (!page.url || !isValidContentUrl(page.url)) return 0;
-    
-    // Check URL slug
-    const urlSlug = new URL(page.url).pathname.toLowerCase();
-    if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
-      score += 0.4;
-    }
-    
-    // Check title
-    if (page.title?.toLowerCase().includes(keywordLower)) {
-      score += 0.3;
-    }
-    
-    // Check content
-    if (page.content?.toLowerCase().includes(keywordLower)) {
-      const frequency = (page.content.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
-      score += Math.min(0.3, frequency * 0.05);
-    }
-    
-    return Math.min(1.0, score);
-  } catch (error) {
-    logger.error(`Error calculating relevance score for URL ${page.url}:`, error);
-    return 0;
-  }
-}
+export { calculateRelevanceScore };
 
 export function extractContext(content: string, keyword: string): string {
   try {
+    if (!content || !keyword) return "";
+    
     const keywordLower = keyword.toLowerCase();
     const contentLower = content.toLowerCase();
-    const keywordIndex = contentLower.indexOf(keywordLower);
     
-    if (keywordIndex === -1) return "";
+    // Find keyword with word boundaries
+    const regex = new RegExp(`\\b${keywordLower}\\b`, 'i');
+    const match = contentLower.match(regex);
     
-    const start = Math.max(0, keywordIndex - 100);
-    const end = Math.min(content.length, keywordIndex + keyword.length + 100);
-    let context = content.slice(start, end).trim();
+    if (!match) return "";
     
-    const regex = new RegExp(keyword, 'gi');
-    context = context.replace(regex, `[${keyword}]`);
+    const keywordIndex = match.index!;
+    const contextStart = Math.max(0, keywordIndex - 100);
+    const contextEnd = Math.min(content.length, keywordIndex + keyword.length + 100);
+    
+    // Get the surrounding context
+    let context = content.slice(contextStart, contextEnd).trim();
+    
+    // Highlight the keyword while preserving its case
+    const originalKeyword = content.slice(
+      keywordIndex,
+      keywordIndex + keyword.length
+    );
+    context = context.replace(originalKeyword, `[${originalKeyword}]`);
+    
+    // Clean up the context
+    context = context
+      .replace(/\s+/g, ' ')
+      .replace(/\n+/g, ' ')
+      .trim();
     
     return context;
+    
   } catch (error) {
     logger.error(`Error extracting context for keyword "${keyword}":`, error);
     return "";
