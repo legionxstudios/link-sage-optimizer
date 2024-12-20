@@ -37,7 +37,7 @@ async def generate_link_suggestions(
         key_phrases = await analyze_content_with_openai(content, url)
         if not key_phrases:
             logger.warning("No key phrases generated")
-            return {'outboundSuggestions': []}
+            return {'outboundSuggestions': []}  # Return empty array instead of empty object
             
         logger.info(f"Generated {len(key_phrases)} key phrases")
         
@@ -96,8 +96,8 @@ async def generate_link_suggestions(
         suggestions = suggestions[:20]
         
         logger.info(f"Generated {len(suggestions)} final suggestions")
-        return {'outboundSuggestions': suggestions}
+        return {'outboundSuggestions': suggestions}  # Always return array, even if empty
         
     except Exception as e:
         logger.error(f"Error generating suggestions: {str(e)}", exc_info=True)
-        return {'outboundSuggestions': []}
+        return {'outboundSuggestions': []}  # Return empty array on error

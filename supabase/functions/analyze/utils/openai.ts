@@ -29,7 +29,7 @@ export async function analyzeWithOpenAI(
     logger.info('Extracted keywords:', keywords);
 
     // Generate link suggestions based on keywords and ALL existing pages
-    const suggestions = generateSuggestions({
+    const suggestions = await generateSuggestions({
       keywords,
       existingPages,
       sourceUrl
@@ -39,12 +39,19 @@ export async function analyzeWithOpenAI(
     
     return {
       keywords,
-      outboundSuggestions: suggestions
+      outboundSuggestions: suggestions || [] // Ensure we always return an array
     };
 
   } catch (error) {
     logger.error('OpenAI analysis failed:', error);
-    throw error;
+    return {
+      keywords: {
+        exact_match: [],
+        broad_match: [],
+        related_match: []
+      },
+      outboundSuggestions: [] // Return empty array on error
+    };
   }
 }
 

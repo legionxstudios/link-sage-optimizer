@@ -120,7 +120,12 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
       related_match: [] 
     };
 
-    const suggestions = (analysisData.outboundSuggestions || []).map((suggestion: any) => ({
+    // Ensure outboundSuggestions is always an array
+    const suggestions = Array.isArray(analysisData.outboundSuggestions) 
+      ? analysisData.outboundSuggestions 
+      : [];
+
+    const processedSuggestions = suggestions.map((suggestion: any) => ({
       suggestedAnchorText: suggestion.suggestedAnchorText || "",
       context: suggestion.context || "",
       matchType: suggestion.matchType || "keyword_based",
@@ -130,13 +135,13 @@ export const analyzePage = async (url: string): Promise<AnalysisResponse> => {
     }));
 
     console.log("Processed keywords:", keywords);
-    console.log("Processed suggestions:", suggestions);
+    console.log("Processed suggestions:", processedSuggestions);
 
     toast.success("Analysis completed successfully!");
 
     return {
       keywords,
-      outboundSuggestions: suggestions
+      outboundSuggestions: processedSuggestions
     };
 
   } catch (error) {
