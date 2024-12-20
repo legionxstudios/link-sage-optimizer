@@ -18,25 +18,19 @@ export function generateSuggestions({
       throw new Error('Source URL is required for suggestion generation');
     }
 
-    if (!isValidContentUrl(sourceUrl)) {
-      logger.error('Invalid source URL provided:', sourceUrl);
-      throw new Error('Invalid source URL provided');
-    }
+    // Get the domain from the source URL
+    const sourceDomain = new URL(sourceUrl).hostname;
+    logger.info(`Using source domain for internal links: ${sourceDomain}`);
 
     const suggestions: Suggestion[] = [];
     const usedUrls = new Set<string>();
     const usedAnchorTexts = new Set<string>();
 
-    // Get the domain from the source URL
-    const sourceDomain = new URL(sourceUrl).hostname;
-    const internalDomains = new Set([sourceDomain]);
-    logger.info(`Using source domain for internal links: ${sourceDomain}`);
-
     // Process each keyword type with different relevance thresholds
     const keywordTypes = {
-      exact_match: 0.2,
-      broad_match: 0.15,
-      related_match: 0.1
+      exact_match: 0.3,
+      broad_match: 0.25,
+      related_match: 0.2
     };
 
     // Process each keyword type
@@ -62,7 +56,7 @@ export function generateSuggestions({
           if (!page.url || usedUrls.has(page.url)) return false;
           
           try {
-            if (!isValidContentUrl(page.url)) {
+            if (!isValidContentUrl(page.url, sourceDomain)) {
               return false;
             }
             

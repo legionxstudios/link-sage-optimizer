@@ -24,8 +24,8 @@ export function calculateContentScore(keyword: string, content: string | undefin
   const firstQuarter = contentLower.slice(0, Math.floor(content.length * 0.25));
   const isProminent = firstQuarter.includes(keywordLower);
   
-  // Calculate final content score
-  const finalScore = (densityScore * 0.7) + (isProminent ? 0.3 : 0);
+  // Calculate final content score with higher weight for exact matches
+  const finalScore = (densityScore * 0.8) + (isProminent ? 0.2 : 0);
 
   logger.info(`Content score for "${keyword}":`, {
     exactMatches,

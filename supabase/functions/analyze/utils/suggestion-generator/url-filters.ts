@@ -17,7 +17,7 @@ const EXCLUDED_PATHS = new Set([
   '/my-account'
 ]);
 
-export function isValidContentUrl(url: string): boolean {
+export function isValidContentUrl(url: string, sourceDomain: string): boolean {
   try {
     if (!url) {
       logger.warn('URL is undefined or empty');
@@ -26,13 +26,13 @@ export function isValidContentUrl(url: string): boolean {
 
     const parsedUrl = new URL(url);
     
-    // Check for excluded WordPress paths and system directories
-    if (EXCLUDED_PATHS.has(parsedUrl.pathname)) {
-      logger.info(`Filtered out system path: ${parsedUrl.pathname}`);
+    // Check if URL is from the same domain
+    if (parsedUrl.hostname.toLowerCase() !== sourceDomain.toLowerCase()) {
+      logger.info(`Filtered out external domain: ${parsedUrl.hostname}`);
       return false;
     }
 
-    // Check if URL contains any excluded paths
+    // Check for excluded paths
     for (const excludedPath of EXCLUDED_PATHS) {
       if (parsedUrl.pathname.includes(excludedPath)) {
         logger.info(`Filtered out URL containing excluded path ${excludedPath}: ${url}`);
