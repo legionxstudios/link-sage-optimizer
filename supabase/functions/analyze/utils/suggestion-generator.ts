@@ -1,6 +1,6 @@
-import { ExistingPage } from "./types";
-import { logger } from "./logger";
-import { calculateRelevanceScore } from "./scoring/relevance-calculator";
+import { ExistingPage } from "./types.ts";
+import { logger } from "./logger.ts";
+import { calculateRelevanceScore } from "./scoring/relevance-calculator.ts";
 
 export function generateSuggestions(
   keywords: { [key: string]: string[] },

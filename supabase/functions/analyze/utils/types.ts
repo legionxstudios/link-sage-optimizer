@@ -7,6 +7,9 @@ export interface ExistingPage {
   url: string;
   title?: string;
   content?: string;
+  metadata?: {
+    detected_themes?: string[];
+  };
 }
 
 export interface AnalysisResult {
