@@ -1,13 +1,13 @@
 import { ExistingPage } from "../types.ts";
 import { logger } from "../logger.ts";
-import { isValidUrl } from "./url-utils.ts";
+import { isValidContentUrl } from "./url-filters.ts";
 
 export function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
   try {
     let score = 0;
     const keywordLower = keyword.toLowerCase();
     
-    if (!page.url || !isValidUrl(page.url)) return 0;
+    if (!page.url || !isValidContentUrl(page.url)) return 0;
     
     // Check URL slug
     const urlSlug = new URL(page.url).pathname.toLowerCase();

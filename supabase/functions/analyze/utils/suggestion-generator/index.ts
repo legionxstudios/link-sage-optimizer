@@ -1,7 +1,6 @@
-import { ExistingPage } from "../types.ts";
 import { logger } from "../logger.ts";
 import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
-import { isValidUrl, isInternalUrl, extractUrlDomain } from "./url-utils.ts";
+import { isValidContentUrl } from "./url-filters.ts";
 import { calculateRelevanceScore, extractContext } from "./scoring.ts";
 
 export function generateSuggestions({
@@ -18,7 +17,7 @@ export function generateSuggestions({
       throw new Error('Source URL is required for suggestion generation');
     }
 
-    if (!isValidUrl(sourceUrl)) {
+    if (!isValidContentUrl(sourceUrl)) {
       logger.error('Invalid source URL provided:', sourceUrl);
       throw new Error('Invalid source URL provided');
     }
@@ -28,11 +27,7 @@ export function generateSuggestions({
     const usedAnchorTexts = new Set<string>();
 
     // Get the domain from the source URL
-    const sourceDomain = extractUrlDomain(sourceUrl);
-    if (!sourceDomain) {
-      throw new Error('Could not extract domain from source URL');
-    }
-    
+    const sourceDomain = new URL(sourceUrl).hostname;
     const internalDomains = new Set([sourceDomain]);
     logger.info(`Using source domain for internal links: ${sourceDomain}`);
 
@@ -66,7 +61,7 @@ export function generateSuggestions({
           if (!page.url || usedUrls.has(page.url)) return false;
           
           try {
-            if (!isInternalUrl(page.url, internalDomains)) {
+            if (!isValidContentUrl(page.url)) {
               return false;
             }
             
