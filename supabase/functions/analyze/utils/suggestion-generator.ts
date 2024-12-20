@@ -16,23 +16,27 @@ export function generateSuggestions(
     logger.info(`Processing ${keywordList.length} ${matchType} keywords`);
 
     for (const keyword of keywordList) {
+      logger.info(`Analyzing keyword: "${keyword}"`);
+      
       // Find best matching page for this keyword
       const matchingPage = findBestMatchingPage(keyword, existingPages, usedUrls);
       
       if (matchingPage) {
+        logger.info(`Found matching page for "${keyword}": ${matchingPage.url}`);
+        
         suggestions.push({
           suggestedAnchorText: keyword,
           targetUrl: matchingPage.url,
           targetTitle: matchingPage.title || '',
           context: `The source content contains "${keyword}" which is relevant to the target page about ${matchingPage.title}`,
-          matchType: "keyword_based",
-          relevanceScore: 0.8
+          matchType: matchType,
+          relevanceScore: calculateRelevanceScore(keyword, matchingPage)
         });
         
         // Track used URL to avoid duplicates
         usedUrls.add(matchingPage.url);
-        
-        logger.info(`Added suggestion: ${keyword} -> ${matchingPage.url}`);
+      } else {
+        logger.info(`No matching page found for keyword: "${keyword}"`);
       }
     }
   }

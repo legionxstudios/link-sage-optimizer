@@ -11,11 +11,12 @@ export async function analyzeWithOpenAI(
     
     if (!openAIApiKey) {
       logger.error('OpenAI API key is not configured');
-      throw new Error('OpenAI API key is not configured. Please set it in the Supabase secrets.');
+      throw new Error('OpenAI API key is not configured');
     }
 
     logger.info('Starting OpenAI analysis...');
     logger.info(`Analyzing content with ${existingPages.length} existing pages`);
+    logger.info('Sample of existing pages:', existingPages.slice(0, 3));
 
     // Extract keywords using OpenAI
     const keywords = await extractKeywords(content, openAIApiKey);
@@ -48,11 +49,22 @@ async function extractKeywords(content: string, apiKey: string) {
       messages: [
         {
           role: 'system',
-          content: `Extract keywords and phrases from the content in these categories:
+          content: `You are an SEO expert analyzing content for internal linking opportunities.
+          Your task is to:
+          1. Extract keywords and phrases that could be used for internal linking
+          2. For each keyword, explain WHY it would make a good internal link
+          3. Consider the context where each keyword appears
+          
+          Return a JSON object with these arrays:
           - exact_match: Phrases that appear exactly in the content (2-3 words only)
           - broad_match: Related phrases that share keywords
           - related_match: Thematically related phrases
-          Return ONLY a JSON object with these three arrays.
+          
+          For each phrase, consider:
+          - Would this make a meaningful link?
+          - Is this a key topic that deserves its own page?
+          - Would users benefit from more information about this topic?
+          
           IMPORTANT: For exact_match, only include phrases that exist VERBATIM in the content.`
         },
         {
