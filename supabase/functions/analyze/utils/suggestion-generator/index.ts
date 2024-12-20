@@ -1,30 +1,26 @@
 import { logger } from "../logger.ts";
 import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
 import { isValidContentUrl } from "./url-filters.ts";
-import { validateContent, extractContext } from "./content-validator.ts";
-import { calculateRelevanceScore } from "./scoring.ts";
+import { calculateRelevanceScore, extractContext } from "./scoring.ts";
 
 export function generateSuggestions({
   keywords,
   existingPages,
-  sourceUrl,
-  sourceContent
+  sourceUrl
 }: SuggestionGeneratorOptions): Suggestion[] {
   try {
-    logger.info('Starting suggestion generation');
-    
-    // Validate required inputs
+    logger.info('Starting suggestion generation with keywords:', keywords);
+    logger.info(`Working with ${existingPages.length} existing pages`);
+
     if (!sourceUrl) {
+      logger.error('Source URL is undefined');
       throw new Error('Source URL is required for suggestion generation');
     }
-    
-    const validContent = validateContent(sourceContent);
-    
+
     if (!isValidContentUrl(sourceUrl)) {
+      logger.error('Invalid source URL provided:', sourceUrl);
       throw new Error('Invalid source URL provided');
     }
-
-    logger.info(`Working with ${existingPages.length} existing pages`);
 
     const suggestions: Suggestion[] = [];
     const usedUrls = new Set<string>();
@@ -45,7 +41,7 @@ export function generateSuggestions({
     // Process each keyword type
     for (const [matchType, threshold] of Object.entries(keywordTypes)) {
       const keywordList = keywords[matchType as keyof typeof keywords] || [];
-      logger.info(`Processing ${keywordList.length} ${matchType} keywords`);
+      logger.info(`Processing ${keywordList.length} ${matchType} keywords with threshold ${threshold}`);
 
       for (const keyword of keywordList) {
         if (!keyword) {
@@ -53,17 +49,10 @@ export function generateSuggestions({
           continue;
         }
 
-        const actualKeyword = keyword.split('(')[0].trim();
+        const actualKeyword = keyword.split('(')[0].trim().toLowerCase();
         
-        if (usedAnchorTexts.has(actualKeyword.toLowerCase())) {
+        if (usedAnchorTexts.has(actualKeyword)) {
           logger.info(`Skipping duplicate anchor text: "${actualKeyword}"`);
-          continue;
-        }
-
-        // Find the context in the source content first
-        const context = extractContext(validContent, actualKeyword);
-        if (!context) {
-          logger.info(`No valid context found for keyword "${actualKeyword}"`);
           continue;
         }
 
@@ -77,11 +66,12 @@ export function generateSuggestions({
             }
             
             const urlSlug = new URL(page.url).pathname.toLowerCase();
-            const keywordLower = actualKeyword.toLowerCase();
+            if (urlSlug.includes(actualKeyword.replace(/\s+/g, '-'))) {
+              return true;
+            }
             
-            return urlSlug.includes(keywordLower.replace(/\s+/g, '-')) ||
-                   page.title?.toLowerCase().includes(keywordLower) ||
-                   page.content?.toLowerCase().includes(keywordLower);
+            return page.title?.toLowerCase().includes(actualKeyword) ||
+                   page.content?.toLowerCase().includes(actualKeyword);
           } catch (error) {
             logger.error(`Error processing page URL ${page.url}:`, error);
             return false;
@@ -104,17 +94,17 @@ export function generateSuggestions({
 
         if (bestMatch && bestMatch.url && !usedUrls.has(bestMatch.url)) {
           suggestions.push({
-            suggestedAnchorText: actualKeyword,
+            suggestedAnchorText: keyword.split('(')[0].trim(),
             targetUrl: bestMatch.url,
             targetTitle: bestMatch.title || '',
-            context: context,
+            context: extractContext(bestMatch.content || '', actualKeyword),
             matchType: matchType,
             relevanceScore: bestScore
           });
           
           usedUrls.add(bestMatch.url);
-          usedAnchorTexts.add(actualKeyword.toLowerCase());
-          logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url}`);
+          usedAnchorTexts.add(actualKeyword);
+          logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url} (score: ${bestScore})`);
         }
 
         if (suggestions.length >= 20) {

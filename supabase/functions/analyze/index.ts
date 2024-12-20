@@ -15,6 +15,7 @@ serve(async (req) => {
   }
 
   try {
+    // Parse and validate request body
     const requestData = await req.json();
     logger.info('Received request data:', requestData);
 
@@ -26,25 +27,32 @@ serve(async (req) => {
     const url = requestData.url;
     logger.info('Processing URL:', url);
 
-    // Extract content from the URL
-    const { title, content } = await extractContent(url);
-    if (!content) {
-      throw new Error('Failed to extract content from URL');
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch (e) {
+      logger.error(`Invalid URL format: ${url}`);
+      throw new Error(`Invalid URL format: ${url}`);
     }
-    
-    logger.info('Content extracted successfully', { title, contentLength: content.length });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseKey) {
+      logger.error('Missing Supabase configuration');
       throw new Error('Missing Supabase configuration');
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get website info and existing pages
+    // Extract content from the URL
+    const { title, content } = await extractContent(url);
+    logger.info('Content extracted successfully', { title });
+
+    // Get website info
     const domain = new URL(url).hostname;
+    logger.info('Looking up website for domain:', domain);
+
     const { data: websiteData, error: websiteError } = await supabase
       .from('websites')
       .select('id')
@@ -52,9 +60,17 @@ serve(async (req) => {
       .single();
 
     if (websiteError) {
-      throw websiteError;
+      logger.error('Error fetching website:', websiteError);
+      throw new Error(`Database error: ${websiteError.message}`);
     }
 
+    if (!websiteData?.id) {
+      logger.error('No website found for domain:', domain);
+      throw new Error(`No website found for domain: ${domain}`);
+    }
+
+    // Get existing pages
+    logger.info('Fetching existing pages for website:', websiteData.id);
     const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
@@ -62,12 +78,21 @@ serve(async (req) => {
       .neq('url', url);
 
     if (pagesError) {
-      throw pagesError;
+      logger.error('Error fetching existing pages:', pagesError);
+      throw new Error('Failed to fetch existing pages');
     }
+
+    // Log detailed information about fetched pages
+    logger.info(`Found ${existingPages?.length || 0} existing pages to analyze`);
+    logger.info('URL patterns found:', existingPages?.map(p => new URL(p.url).pathname));
 
     // Analyze content with OpenAI
     logger.info('Starting OpenAI analysis');
     const analysis = await analyzeWithOpenAI(content, existingPages || [], url);
+    logger.info('Analysis completed:', {
+      keywordCount: Object.keys(analysis.keywords || {}).length,
+      suggestionCount: analysis.outboundSuggestions?.length || 0
+    });
 
     // Store analysis results
     const { error: analysisError } = await supabase
@@ -85,14 +110,21 @@ serve(async (req) => {
       });
 
     if (analysisError) {
+      logger.error('Error storing analysis:', analysisError);
       throw analysisError;
     }
 
-    logger.info('Analysis completed successfully');
+    logger.info('Analysis results stored successfully');
+    logger.info('Final analysis output:', analysis);
 
     return new Response(
       JSON.stringify(analysis),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
     );
 
   } catch (error) {
