@@ -1,8 +1,8 @@
-import { logger } from "../logger";
-import { calculateThemeScore } from "./theme-scorer";
-import { calculateContentScore } from "./content-scorer";
-import { calculateUrlScore } from "./url-scorer";
-import { ExistingPage } from "../types";
+import { logger } from "../logger.ts";
+import { calculateThemeScore } from "./theme-scorer.ts";
+import { calculateContentScore } from "./content-scorer.ts";
+import { calculateUrlScore } from "./url-scorer.ts";
+import type { ExistingPage } from "../types.ts";
 
 const SCORE_WEIGHTS = {
   theme: 0.4,    // Theme relevance (40%)
@@ -15,7 +15,7 @@ export function calculateRelevanceScore(keyword: string, page: ExistingPage): nu
   let finalScore = 0;
   
   // Theme-based scoring (40%)
-  const themeScore = calculateThemeScore(keyword, page.metadata?.detected_themes as string[]);
+  const themeScore = calculateThemeScore(keyword, page.metadata?.detected_themes);
   finalScore += themeScore * SCORE_WEIGHTS.theme;
   
   // URL relevance (30%)

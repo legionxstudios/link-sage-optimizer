@@ -1,4 +1,4 @@
-import { logger } from "../logger";
+import { logger } from "../logger.ts";
 
 export function calculateThemeScore(keyword: string, themes: string[] | undefined): number {
   // If no themes are available, return a low base score instead of neutral

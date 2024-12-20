@@ -1,4 +1,4 @@
-import { logger } from "../logger";
+import { logger } from "../logger.ts";
 
 export function calculateContentScore(keyword: string, content: string | undefined): number {
   if (!content) {

@@ -1,4 +1,4 @@
-import { logger } from "../logger";
+import { logger } from "../logger.ts";
 
 export function calculateUrlScore(keyword: string, url: string): number {
   try {
