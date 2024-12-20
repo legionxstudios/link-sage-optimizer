@@ -1,11 +1,16 @@
 import { logger } from "../logger.ts";
 import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
-import { calculateRelevanceScore } from "../scoring/relevance-calculator.ts";
-import { extractContext } from "./scoring.ts";
-import { sortSuggestions } from "./sorting.ts";
-import { SUGGESTION_LIMITS } from "./constants.ts";
-import { filterMatchingPages } from "./filters.ts";
-import { createSupabaseClient } from "../db.ts";
+import { findMatchingPages } from "./url-matcher.ts";
+import { calculateRelevanceScore } from "./scoring.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const MATCH_TYPE_THRESHOLDS = {
+  exact_match: 0.3,
+  broad_match: 0.2,
+  related_match: 0.1
+};
+
+const MAX_SUGGESTIONS = 10;
 
 export async function generateSuggestions({
   keywords,
@@ -21,43 +26,26 @@ export async function generateSuggestions({
       throw new Error('Source URL is required for suggestion generation');
     }
 
-    const sourceDomain = new URL(sourceUrl).hostname;
-    logger.info(`Using source domain for internal links: ${sourceDomain}`);
-
     const suggestions: Suggestion[] = [];
     const usedUrls = new Set<string>();
     const usedAnchorTexts = new Set<string>();
 
-    const supabase = createSupabaseClient();
-
     // Process each keyword type
-    for (const [matchType, threshold] of Object.entries(SUGGESTION_LIMITS.MATCH_TYPE_THRESHOLDS)) {
-      if (suggestions.length >= SUGGESTION_LIMITS.MAX_SUGGESTIONS) {
-        break;
-      }
+    for (const [matchType, threshold] of Object.entries(MATCH_TYPE_THRESHOLDS)) {
+      if (suggestions.length >= MAX_SUGGESTIONS) break;
 
       const keywordList = keywords[matchType as keyof typeof keywords] || [];
       logger.info(`Processing ${keywordList.length} ${matchType} keywords with threshold ${threshold}`);
 
       for (const keyword of keywordList) {
-        if (suggestions.length >= SUGGESTION_LIMITS.MAX_SUGGESTIONS) {
-          break;
-        }
-
-        if (!keyword) {
-          logger.warn('Skipping empty keyword');
-          continue;
-        }
+        if (suggestions.length >= MAX_SUGGESTIONS) break;
+        if (!keyword) continue;
 
         const actualKeyword = keyword.split('(')[0].trim().toLowerCase();
-        
-        if (usedAnchorTexts.has(actualKeyword)) {
-          logger.info(`Skipping duplicate anchor text: "${actualKeyword}"`);
-          continue;
-        }
+        if (usedAnchorTexts.has(actualKeyword)) continue;
 
-        // Fetch page data from database for matching URLs
-        const matchingPages = filterMatchingPages(actualKeyword, existingPages, usedUrls, sourceDomain);
+        // Find matching pages based on URL patterns
+        const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls);
         logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
 
         // Find the best matching page
@@ -67,43 +55,10 @@ export async function generateSuggestions({
         for (const page of matchingPages) {
           if (!page.url) continue;
 
-          // Fetch full page data from database
-          const { data: pageData, error } = await supabase
-            .from('pages')
-            .select('url, title, content')
-            .eq('url', page.url)
-            .single();
-
-          if (error) {
-            logger.error(`Error fetching page data for ${page.url}:`, error);
-            continue;
-          }
-
-          if (!pageData) {
-            logger.warn(`No page data found for ${page.url}`);
-            continue;
-          }
-
-          logger.info(`Retrieved page data for ${page.url}:`, {
-            title: pageData.title,
-            contentLength: pageData.content?.length || 0
-          });
-
-          const score = calculateRelevanceScore(actualKeyword, {
-            url: page.url,
-            title: pageData.title || '',
-            content: pageData.content || ''
-          });
-
-          logger.info(`Calculated score for ${page.url}: ${score}`);
-
+          const score = calculateRelevanceScore(actualKeyword, page);
           if (score > bestScore && score >= threshold) {
             bestScore = score;
-            bestMatch = {
-              url: page.url,
-              title: pageData.title || '',
-              content: pageData.content || ''
-            };
+            bestMatch = page;
           }
         }
 
@@ -111,8 +66,8 @@ export async function generateSuggestions({
           suggestions.push({
             suggestedAnchorText: keyword.split('(')[0].trim(),
             targetUrl: bestMatch.url,
-            targetTitle: bestMatch.title,
-            context: extractContext(bestMatch.content, actualKeyword),
+            targetTitle: bestMatch.title || '',
+            context: extractContext(bestMatch.content || '', actualKeyword),
             matchType: matchType,
             relevanceScore: bestScore
           });
@@ -124,12 +79,33 @@ export async function generateSuggestions({
       }
     }
 
-    const sortedSuggestions = sortSuggestions(suggestions);
-    logger.info(`Generated ${sortedSuggestions.length} total suggestions`);
-    return sortedSuggestions.slice(0, SUGGESTION_LIMITS.MAX_SUGGESTIONS);
+    logger.info(`Generated ${suggestions.length} total suggestions`);
+    return suggestions.sort((a, b) => b.relevanceScore - a.relevanceScore);
     
   } catch (error) {
     logger.error('Error in suggestion generation:', error);
-    throw error;
+    return [];
+  }
+}
+
+function extractContext(content: string, keyword: string): string {
+  try {
+    const keywordLower = keyword.toLowerCase();
+    const contentLower = content.toLowerCase();
+    const keywordIndex = contentLower.indexOf(keywordLower);
+    
+    if (keywordIndex === -1) return "";
+    
+    const start = Math.max(0, keywordIndex - 100);
+    const end = Math.min(content.length, keywordIndex + keyword.length + 100);
+    let context = content.slice(start, end).trim();
+    
+    const regex = new RegExp(keyword, 'gi');
+    context = context.replace(regex, `[${keyword}]`);
+    
+    return context;
+  } catch (error) {
+    logger.error(`Error extracting context for keyword "${keyword}":`, error);
+    return "";
   }
 }

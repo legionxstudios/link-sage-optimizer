@@ -1,42 +1,34 @@
 import { logger } from "../logger.ts";
+import { ExistingPage } from "./types.ts";
 
-export function extractContext(content: string, keyword: string): string {
+export function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
   try {
-    if (!content || !keyword) return "";
+    if (!page.url) return 0;
     
+    let score = 0;
     const keywordLower = keyword.toLowerCase();
-    const contentLower = content.toLowerCase();
     
-    // Find keyword with word boundaries
-    const regex = new RegExp(`\\b${keywordLower}\\b`, 'i');
-    const match = contentLower.match(regex);
+    // Check URL slug (highest weight)
+    const urlSlug = new URL(page.url).pathname.toLowerCase();
+    if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
+      score += 0.6; // Increased weight for URL matches
+    }
     
-    if (!match) return "";
+    // Check title if available (medium weight)
+    if (page.title?.toLowerCase().includes(keywordLower)) {
+      score += 0.3;
+    }
     
-    const keywordIndex = match.index!;
-    const contextStart = Math.max(0, keywordIndex - 100);
-    const contextEnd = Math.min(content.length, keywordIndex + keyword.length + 100);
+    // Check content if available (lower weight)
+    if (page.content?.toLowerCase().includes(keywordLower)) {
+      const frequency = (page.content.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
+      score += Math.min(0.1, frequency * 0.02); // Reduced weight for content matches
+    }
     
-    // Get the surrounding context
-    let context = content.slice(contextStart, contextEnd).trim();
-    
-    // Highlight the keyword while preserving its case
-    const originalKeyword = content.slice(
-      keywordIndex,
-      keywordIndex + keyword.length
-    );
-    context = context.replace(originalKeyword, `[${originalKeyword}]`);
-    
-    // Clean up the context
-    context = context
-      .replace(/\s+/g, ' ')
-      .replace(/\n+/g, ' ')
-      .trim();
-    
-    return context;
-    
+    logger.info(`Relevance score for "${keyword}" -> ${page.url}: ${score}`);
+    return Math.min(1.0, score);
   } catch (error) {
-    logger.error(`Error extracting context for keyword "${keyword}":`, error);
-    return "";
+    logger.error(`Error calculating relevance score for URL ${page.url}:`, error);
+    return 0;
   }
 }
