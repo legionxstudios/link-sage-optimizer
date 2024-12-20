@@ -69,7 +69,7 @@ serve(async (req) => {
 
     // Wait for all pages to be processed before proceeding
     logger.info('Starting OpenAI analysis with all pages');
-    const analysis = await analyzeWithOpenAI(content, existingPages || []);
+    const analysis = await analyzeWithOpenAI(content, existingPages || [], url); // Pass the URL
     logger.info('Analysis completed with full page set:', {
       keywordCount: Object.keys(analysis.keywords || {}).length,
       suggestionCount: analysis.outboundSuggestions?.length || 0

@@ -4,7 +4,8 @@ import { calculateRelevanceScore } from "./scoring/relevance-calculator.ts";
 
 export function generateSuggestions(
   keywords: { [key: string]: string[] },
-  existingPages: ExistingPage[]
+  existingPages: ExistingPage[],
+  sourceUrl: string // Add sourceUrl parameter
 ) {
   logger.info('Starting suggestion generation with keywords:', keywords);
   logger.info(`Working with ${existingPages.length} existing pages`);
@@ -13,9 +14,10 @@ export function generateSuggestions(
   const usedUrls = new Set<string>();
   const usedAnchorTexts = new Set<string>();
 
-  // Get all valid domains that should be considered internal
-  const internalDomains = new Set(['legionxstudios.com', 'www.legionxstudios.com']);
-  logger.info(`Using internal domains:`, Array.from(internalDomains));
+  // Get the domain from the source URL
+  const sourceDomain = new URL(sourceUrl).hostname;
+  const internalDomains = new Set([sourceDomain]);
+  logger.info(`Using source domain for internal links: ${sourceDomain}`);
 
   // Process each keyword type with different relevance thresholds
   const keywordTypes = {
