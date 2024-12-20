@@ -1,10 +1,10 @@
 import { logger } from "../logger.ts";
 import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
-import { isValidContentUrl } from "./url-filters.ts";
 import { calculateRelevanceScore } from "../scoring/relevance-calculator.ts";
 import { extractContext } from "./scoring.ts";
 import { sortSuggestions } from "./sorting.ts";
 import { SUGGESTION_LIMITS } from "./constants.ts";
+import { filterMatchingPages } from "./filters.ts";
 
 export function generateSuggestions({
   keywords,
@@ -53,28 +53,8 @@ export function generateSuggestions({
           continue;
         }
 
-        // Find matching pages for this keyword
-        const matchingPages = existingPages.filter(page => {
-          if (!page.url || usedUrls.has(page.url)) return false;
-          
-          try {
-            if (!isValidContentUrl(page.url, sourceDomain)) {
-              return false;
-            }
-            
-            const urlSlug = new URL(page.url).pathname.toLowerCase();
-            if (urlSlug.includes(actualKeyword.replace(/\s+/g, '-'))) {
-              return true;
-            }
-            
-            return page.title?.toLowerCase().includes(actualKeyword) ||
-                   page.content?.toLowerCase().includes(actualKeyword);
-          } catch (error) {
-            logger.error(`Error processing page URL ${page.url}:`, error);
-            return false;
-          }
-        });
-
+        // Find matching pages using the filter function
+        const matchingPages = filterMatchingPages(actualKeyword, existingPages, usedUrls, sourceDomain);
         logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
         
         // Find the best matching page
@@ -83,7 +63,7 @@ export function generateSuggestions({
 
         for (const page of matchingPages) {
           const score = calculateRelevanceScore(actualKeyword, page);
-          if (score > bestScore && score >= SUGGESTION_LIMITS.MIN_RELEVANCE_SCORE) {
+          if (score > bestScore && score >= threshold) {
             bestScore = score;
             bestMatch = page;
           }
