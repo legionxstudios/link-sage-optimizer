@@ -49,16 +49,23 @@ async function extractKeywords(content: string, apiKey: string) {
       messages: [
         {
           role: 'system',
-          content: `You are an SEO expert. Extract keywords from the content and return them in a specific JSON format.
+          content: `You are an SEO expert analyzing content for internal linking opportunities.
+          Your task is to:
+          1. Extract keywords and phrases that could be used for internal linking
+          2. For each keyword, explain WHY it would make a good internal link
+          3. Consider the context where each keyword appears
           
-          Rules:
-          1. ONLY return a valid JSON object
-          2. The JSON object must have exactly these three arrays:
-             - exact_match: 2-3 word phrases that appear VERBATIM in the content
-             - broad_match: Related phrases sharing keywords
-             - related_match: Thematically related phrases
-          3. Do not include any explanation or additional text
-          4. Ensure the response is pure JSON`
+          Return a JSON object with these arrays:
+          - exact_match: Phrases that appear exactly in the content (2-3 words only)
+          - broad_match: Related phrases that share keywords
+          - related_match: Thematically related phrases
+          
+          For each phrase, consider:
+          - Would this make a meaningful link?
+          - Is this a key topic that deserves its own page?
+          - Would users benefit from more information about this topic?
+          
+          IMPORTANT: For exact_match, only include phrases that exist VERBATIM in the content.`
         },
         {
           role: 'user',
@@ -80,21 +87,10 @@ async function extractKeywords(content: string, apiKey: string) {
 
   try {
     const responseContent = data.choices[0].message.content.trim();
-    logger.info('Cleaned keywords content:', responseContent);
+    const cleanContent = responseContent.replace(/```json\n|\n```|```/g, '').trim();
+    logger.info('Cleaned keywords content:', cleanContent);
     
-    // Attempt to parse the JSON response
-    const keywords = JSON.parse(responseContent);
-    
-    // Validate the response structure
-    if (!keywords.exact_match || !keywords.broad_match || !keywords.related_match) {
-      throw new Error('Invalid response structure from OpenAI');
-    }
-    
-    return {
-      exact_match: keywords.exact_match,
-      broad_match: keywords.broad_match,
-      related_match: keywords.related_match
-    };
+    return JSON.parse(cleanContent);
   } catch (e) {
     logger.error('Error parsing OpenAI keywords:', e);
     logger.error('Raw content:', data.choices[0].message.content);
