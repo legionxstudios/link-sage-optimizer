@@ -12,9 +12,9 @@ export function generateSuggestions(
   const usedUrls = new Set<string>();
   const usedAnchorTexts = new Set<string>();
 
-  // Get base domain from first existing page to use as reference
-  const baseDomain = existingPages.length > 0 ? new URL(existingPages[0].url).hostname : '';
-  logger.info(`Using base domain: ${baseDomain}`);
+  // Get all valid domains that should be considered internal
+  const internalDomains = new Set(['legionxstudios.com', 'www.legionxstudios.com']);
+  logger.info(`Using internal domains:`, Array.from(internalDomains));
 
   // Process each keyword type with different relevance thresholds
   const keywordTypes = {
@@ -40,7 +40,7 @@ export function generateSuggestions(
       logger.info(`Processing keyword: "${actualKeyword}"`);
       
       // Find matching pages for this keyword
-      const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls, baseDomain);
+      const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls, internalDomains);
       logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
       
       // Find the best matching page for this keyword
@@ -49,7 +49,7 @@ export function generateSuggestions(
 
       for (const page of matchingPages) {
         // Skip if the URL is external
-        if (!isInternalUrl(page.url, baseDomain)) {
+        if (!isInternalUrl(page.url, internalDomains)) {
           logger.info(`Skipping external URL: ${page.url}`);
           continue;
         }
@@ -94,7 +94,7 @@ function findMatchingPages(
   keyword: string, 
   existingPages: ExistingPage[], 
   usedUrls: Set<string>,
-  baseDomain: string
+  internalDomains: Set<string>
 ): ExistingPage[] {
   const keywordLower = keyword.toLowerCase();
   
@@ -103,7 +103,7 @@ function findMatchingPages(
     if (!page.url || usedUrls.has(page.url)) return false;
     
     // Skip non-content pages and external URLs
-    if (!isInternalUrl(page.url, baseDomain) ||
+    if (!isInternalUrl(page.url, internalDomains) ||
         page.url.includes('/wp-content/') ||
         page.url.includes('/cart') ||
         page.url.includes('/checkout') ||
@@ -168,10 +168,10 @@ function extractContext(content: string, keyword: string): string {
   return context;
 }
 
-function isInternalUrl(url: string, baseDomain: string): boolean {
+function isInternalUrl(url: string, internalDomains: Set<string>): boolean {
   try {
-    const urlDomain = new URL(url).hostname;
-    return urlDomain === baseDomain;
+    const urlDomain = new URL(url).hostname.toLowerCase();
+    return internalDomains.has(urlDomain);
   } catch (error) {
     logger.error(`Error checking if URL is internal: ${error}`);
     return false;
