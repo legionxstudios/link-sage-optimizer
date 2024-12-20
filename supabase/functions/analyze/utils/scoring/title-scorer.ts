@@ -10,8 +10,8 @@ export function calculateTitleScore(keyword: string, title: string | undefined):
 
   // Exact match in title gets highest score
   if (titleLower.includes(keywordLower)) {
-    logger.info(`High title relevance (0.9) for "${keyword}" in "${title}"`);
-    return 0.9;
+    logger.info(`Exact title match found for "${keyword}" in "${title}"`);
+    return 1.0;
   }
 
   // Check for partial matches
@@ -20,7 +20,7 @@ export function calculateTitleScore(keyword: string, title: string | undefined):
     titleLower.includes(part)
   ).length;
 
-  const partialScore = matchCount / keywordParts.length * 0.6;
-  logger.info(`Partial title relevance (${partialScore}) for "${keyword}" in "${title}"`);
-  return partialScore;
+  const score = (matchCount / keywordParts.length) * 0.8; // Partial matches get up to 80%
+  logger.info(`Title score for "${keyword}": ${score} (${matchCount}/${keywordParts.length} parts matched) in "${title}"`);
+  return score;
 }
