@@ -40,7 +40,7 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
   if (!results) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
+      <div className="text-center py-12 text-muted-foreground">
         No analysis results available.
       </div>
     );
@@ -48,9 +48,7 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
   const { keywords, outboundSuggestions } = results;
 
-  // Helper function to clean and format keyword strings
   const formatKeyword = (keyword: string): string => {
-    // Extract just the keyword part before the dash and context
     const parts = keyword.split(' - ');
     return parts[0].trim();
   };
@@ -63,19 +61,19 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
       className="space-y-6"
     >
       {keywords && (
-        <Card className="p-6">
+        <Card className="glass-card p-8">
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Keywords Analysis</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Keywords Analysis</h3>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               {keywords.exact_match?.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Exact Match Keywords</h4>
+                  <h4 className="text-sm font-medium mb-3 text-gray-700">Exact Match Keywords</h4>
                   <div className="flex flex-wrap gap-2">
                     {keywords.exact_match.map((keyword, index) => (
-                      <Badge key={index} variant="default">
+                      <Badge key={index} variant="default" className="px-3 py-1 bg-accent/20 text-primary border-0">
                         {formatKeyword(keyword)}
                       </Badge>
                     ))}
@@ -85,10 +83,10 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
               {keywords.broad_match?.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Broad Match Keywords</h4>
+                  <h4 className="text-sm font-medium mb-3 text-gray-700">Broad Match Keywords</h4>
                   <div className="flex flex-wrap gap-2">
                     {keywords.broad_match.map((keyword, index) => (
-                      <Badge key={index} variant="secondary">
+                      <Badge key={index} variant="secondary" className="px-3 py-1 bg-white/50 text-primary border-0">
                         {formatKeyword(keyword)}
                       </Badge>
                     ))}
@@ -98,10 +96,10 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
 
               {keywords.related_match?.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Related Keywords</h4>
+                  <h4 className="text-sm font-medium mb-3 text-gray-700">Related Keywords</h4>
                   <div className="flex flex-wrap gap-2">
                     {keywords.related_match.map((keyword, index) => (
-                      <Badge key={index} variant="outline">
+                      <Badge key={index} variant="outline" className="px-3 py-1 bg-white/30 text-primary border-white/20">
                         {formatKeyword(keyword)}
                       </Badge>
                     ))}
@@ -114,9 +112,9 @@ export const AnalysisResults = ({ results }: AnalysisResultsProps) => {
       )}
 
       {outboundSuggestions && outboundSuggestions.length > 0 && (
-        <Card className="p-6">
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Link Suggestions</h3>
+        <Card className="glass-card p-8">
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-gray-900">Link Suggestions</h3>
             <LinkSuggestions suggestions={outboundSuggestions} />
           </div>
         </Card>

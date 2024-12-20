@@ -46,18 +46,18 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-background to-background/80">
+    <div className="min-h-screen p-6 bg-gradient-to-b from-background to-background/80">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="w-full max-w-4xl space-y-8"
+        className="max-w-5xl mx-auto space-y-8"
       >
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center px-3 py-1 rounded-full bg-primary/5 text-primary text-sm font-medium">
-            Link Suggestion Tool
+          <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-accent/20 text-primary text-sm font-medium">
+            Link Sage Optimizer
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900">
             Get Smart Link Suggestions
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -65,7 +65,7 @@ const Index = () => {
           </p>
         </div>
 
-        <Card className="p-6">
+        <Card className="glass-card p-8">
           <form onSubmit={handleAnalyze} className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <Input
@@ -73,12 +73,16 @@ const Index = () => {
                 placeholder="Enter your page URL (e.g., https://example.com/page)"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                className="flex-1"
+                className="flex-1 h-12 rounded-xl bg-white/50 border-white/20 backdrop-blur-sm"
               />
-              <Button type="submit" disabled={isAnalyzing}>
+              <Button 
+                type="submit" 
+                disabled={isAnalyzing}
+                className="h-12 px-8 rounded-xl bg-accent hover:bg-accent/90 text-accent-foreground font-semibold"
+              >
                 {isAnalyzing ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     Analyzing...
                   </div>
                 ) : (
