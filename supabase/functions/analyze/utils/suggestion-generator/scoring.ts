@@ -8,24 +8,27 @@ export function calculateRelevanceScore(keyword: string, page: ExistingPage): nu
     let score = 0;
     const keywordLower = keyword.toLowerCase();
     
-    // Check URL slug (highest weight)
+    // URL slug match (highest weight)
     const urlSlug = new URL(page.url).pathname.toLowerCase();
     if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
-      score += 0.6; // Increased weight for URL matches
+      score += 0.6;
+      logger.info(`URL match found for "${keyword}" in ${page.url}`);
     }
     
-    // Check title if available (medium weight)
+    // Title match (medium weight)
     if (page.title?.toLowerCase().includes(keywordLower)) {
       score += 0.3;
+      logger.info(`Title match found for "${keyword}" in ${page.title}`);
     }
     
-    // Check content if available (lower weight)
+    // Content match (lower weight)
     if (page.content?.toLowerCase().includes(keywordLower)) {
       const frequency = (page.content.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
-      score += Math.min(0.1, frequency * 0.02); // Reduced weight for content matches
+      score += Math.min(0.1, frequency * 0.02);
+      logger.info(`Content matches found for "${keyword}": ${frequency} occurrences`);
     }
     
-    logger.info(`Relevance score for "${keyword}" -> ${page.url}: ${score}`);
+    logger.info(`Final relevance score for "${keyword}" -> ${page.url}: ${score}`);
     return Math.min(1.0, score);
   } catch (error) {
     logger.error(`Error calculating relevance score for URL ${page.url}:`, error);

@@ -1,16 +1,13 @@
 import { logger } from "../logger.ts";
 import { SuggestionGeneratorOptions, Suggestion } from "./types.ts";
-import { findMatchingPages } from "./url-matcher.ts";
 import { calculateRelevanceScore } from "./scoring.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isInternalUrl, isValidContentUrl } from "./url-validator.ts";
 
 const MATCH_TYPE_THRESHOLDS = {
   exact_match: 0.3,
   broad_match: 0.2,
   related_match: 0.1
 };
-
-const MAX_SUGGESTIONS = 10;
 
 export async function generateSuggestions({
   keywords,
@@ -26,27 +23,41 @@ export async function generateSuggestions({
       throw new Error('Source URL is required for suggestion generation');
     }
 
+    const sourceDomain = new URL(sourceUrl).hostname;
+    logger.info(`Source domain: ${sourceDomain}`);
+
     const suggestions: Suggestion[] = [];
     const usedUrls = new Set<string>();
     const usedAnchorTexts = new Set<string>();
 
     // Process each keyword type
     for (const [matchType, threshold] of Object.entries(MATCH_TYPE_THRESHOLDS)) {
-      if (suggestions.length >= MAX_SUGGESTIONS) break;
+      if (suggestions.length >= 20) break;
 
       const keywordList = keywords[matchType as keyof typeof keywords] || [];
       logger.info(`Processing ${keywordList.length} ${matchType} keywords with threshold ${threshold}`);
 
       for (const keyword of keywordList) {
-        if (suggestions.length >= MAX_SUGGESTIONS) break;
+        if (suggestions.length >= 20) break;
         if (!keyword) continue;
 
         const actualKeyword = keyword.split('(')[0].trim().toLowerCase();
         if (usedAnchorTexts.has(actualKeyword)) continue;
 
-        // Find matching pages based on URL patterns
-        const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls);
-        logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
+        // Filter pages for internal URLs only
+        const matchingPages = existingPages.filter(page => {
+          if (!page.url || usedUrls.has(page.url)) return false;
+          
+          try {
+            return isInternalUrl(page.url, sourceDomain) && 
+                   isValidContentUrl(page.url);
+          } catch (error) {
+            logger.error(`Error processing URL ${page.url}:`, error);
+            return false;
+          }
+        });
+
+        logger.info(`Found ${matchingPages.length} potential internal matches for "${actualKeyword}"`);
 
         // Find the best matching page
         let bestMatch = null;
