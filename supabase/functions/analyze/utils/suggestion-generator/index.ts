@@ -5,7 +5,7 @@ import { extractContext } from "./scoring.ts";
 import { sortSuggestions } from "./sorting.ts";
 import { SUGGESTION_LIMITS } from "./constants.ts";
 import { filterMatchingPages } from "./filters.ts";
-import { supabase } from "../db.ts";
+import { createSupabaseClient } from "../db.ts";
 
 export async function generateSuggestions({
   keywords,
@@ -27,6 +27,8 @@ export async function generateSuggestions({
     const suggestions: Suggestion[] = [];
     const usedUrls = new Set<string>();
     const usedAnchorTexts = new Set<string>();
+
+    const supabase = createSupabaseClient();
 
     // Process each keyword type
     for (const [matchType, threshold] of Object.entries(SUGGESTION_LIMITS.MATCH_TYPE_THRESHOLDS)) {
