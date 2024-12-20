@@ -17,6 +17,7 @@ serve(async (req) => {
   try {
     // Validate request method
     if (req.method !== 'POST') {
+      console.error('Invalid method:', req.method);
       return new Response(
         JSON.stringify({ 
           error: 'Method not allowed' 
@@ -55,6 +56,7 @@ serve(async (req) => {
     }
 
     if (!requestData?.url) {
+      console.error('Missing URL in request body');
       return new Response(
         JSON.stringify({ 
           error: 'Invalid request body', 
