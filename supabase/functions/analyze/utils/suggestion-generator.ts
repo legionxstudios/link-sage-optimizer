@@ -7,41 +7,50 @@ export function generateSuggestions(
 ) {
   logger.info('Starting suggestion generation with keywords:', keywords);
   logger.info(`Working with ${existingPages.length} existing pages`);
-  logger.debug('First few existing pages:', existingPages.slice(0, 3));
 
   const suggestions = [];
   const usedUrls = new Set<string>();
 
+  // Process each keyword type with different relevance thresholds
+  const keywordTypes = {
+    exact_match: 0.2,  // Lowered threshold to ensure we get suggestions
+    broad_match: 0.15,
+    related_match: 0.1
+  };
+
   // Process each keyword type
-  for (const [matchType, keywordList] of Object.entries(keywords)) {
-    logger.info(`Processing ${keywordList.length} ${matchType} keywords`);
+  for (const [matchType, threshold] of Object.entries(keywordTypes)) {
+    const keywordList = keywords[matchType as keyof typeof keywords] || [];
+    logger.info(`Processing ${keywordList.length} ${matchType} keywords with threshold ${threshold}`);
 
     for (const keyword of keywordList) {
-      logger.info(`Analyzing keyword: "${keyword}"`);
+      // Extract the actual keyword from the format "keyword (density) - context"
+      const actualKeyword = keyword.split('(')[0].trim();
+      logger.info(`Processing keyword: "${actualKeyword}"`);
       
-      // Find best matching page for this keyword
-      const matchingPages = findMatchingPages(keyword, existingPages, usedUrls);
-      logger.info(`Found ${matchingPages.length} potential matches for "${keyword}"`);
+      // Find matching pages for this keyword
+      const matchingPages = findMatchingPages(actualKeyword, existingPages, usedUrls);
+      logger.info(`Found ${matchingPages.length} potential matches for "${actualKeyword}"`);
       
       for (const matchingPage of matchingPages) {
-        if (suggestions.length >= 10) break; // Limit to top 10 suggestions
+        if (suggestions.length >= 20) break; // Increased limit from 10 to 20
         
-        const relevanceScore = calculateRelevanceScore(keyword, matchingPage);
-        logger.info(`Relevance score for "${keyword}" -> ${matchingPage.url}: ${relevanceScore}`);
+        const relevanceScore = calculateRelevanceScore(actualKeyword, matchingPage);
+        logger.info(`Relevance score for "${actualKeyword}" -> ${matchingPage.url}: ${relevanceScore}`);
 
-        if (relevanceScore > 0.3) { // Lowered threshold from 0.5 to 0.3
+        if (relevanceScore > threshold) { // Using dynamic threshold based on match type
           suggestions.push({
-            suggestedAnchorText: keyword,
+            suggestedAnchorText: actualKeyword,
             targetUrl: matchingPage.url,
             targetTitle: matchingPage.title || '',
-            context: `Content contains "${keyword}" which is relevant to the target page about ${matchingPage.title}`,
+            context: extractContext(matchingPage.content || '', actualKeyword),
             matchType: matchType,
-            relevanceScore
+            relevanceScore: relevanceScore
           });
           
           // Track used URL to avoid duplicates
           usedUrls.add(matchingPage.url);
-          logger.info(`Added suggestion for "${keyword}" -> ${matchingPage.url}`);
+          logger.info(`Added suggestion for "${actualKeyword}" -> ${matchingPage.url}`);
         }
       }
     }
@@ -72,6 +81,12 @@ function findMatchingPages(
       return false;
     }
     
+    // Check if keyword appears in URL slug
+    const urlSlug = new URL(page.url).pathname.toLowerCase();
+    if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
+      return true;
+    }
+    
     // Check if keyword appears in title or content
     const titleMatch = page.title?.toLowerCase().includes(keywordLower);
     const contentMatch = page.content?.toLowerCase().includes(keywordLower);
@@ -84,16 +99,40 @@ function calculateRelevanceScore(keyword: string, page: ExistingPage): number {
   let score = 0;
   const keywordLower = keyword.toLowerCase();
   
-  // Check title (higher weight for title matches)
-  if (page.title?.toLowerCase().includes(keywordLower)) {
-    score += 0.6;
+  // Check URL slug (highest weight)
+  const urlSlug = new URL(page.url).pathname.toLowerCase();
+  if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
+    score += 0.4;
   }
   
-  // Check content
+  // Check title (medium weight)
+  if (page.title?.toLowerCase().includes(keywordLower)) {
+    score += 0.3;
+  }
+  
+  // Check content (lower weight)
   if (page.content?.toLowerCase().includes(keywordLower)) {
     const frequency = (page.content.toLowerCase().match(new RegExp(keywordLower, 'g')) || []).length;
-    score += Math.min(0.4, frequency * 0.1); // Cap content score at 0.4
+    score += Math.min(0.3, frequency * 0.05); // Cap content score at 0.3
   }
   
   return Math.min(1.0, score);
+}
+
+function extractContext(content: string, keyword: string): string {
+  const keywordLower = keyword.toLowerCase();
+  const contentLower = content.toLowerCase();
+  const keywordIndex = contentLower.indexOf(keywordLower);
+  
+  if (keywordIndex === -1) return "";
+  
+  const start = Math.max(0, keywordIndex - 100);
+  const end = Math.min(content.length, keywordIndex + keyword.length + 100);
+  let context = content.slice(start, end).trim();
+  
+  // Highlight the keyword in the context
+  const regex = new RegExp(keyword, 'gi');
+  context = context.replace(regex, `[${keyword}]`);
+  
+  return context;
 }
