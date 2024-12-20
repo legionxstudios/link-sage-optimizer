@@ -10,6 +10,7 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -64,17 +65,28 @@ serve(async (req) => {
       throw new Error(`Database error: ${websiteError.message}`);
     }
 
-    if (!websiteData?.id) {
-      logger.error('No website found for domain:', domain);
-      throw new Error(`No website found for domain: ${domain}`);
+    // Create website if it doesn't exist
+    let websiteId = websiteData?.id;
+    if (!websiteId) {
+      const { data: newWebsite, error: createError } = await supabase
+        .from('websites')
+        .insert({ domain })
+        .select('id')
+        .single();
+
+      if (createError) {
+        logger.error('Error creating website:', createError);
+        throw new Error(`Failed to create website: ${createError.message}`);
+      }
+      websiteId = newWebsite.id;
     }
 
     // Get existing pages
-    logger.info('Fetching existing pages for website:', websiteData.id);
+    logger.info('Fetching existing pages for website:', websiteId);
     const { data: existingPages, error: pagesError } = await supabase
       .from('pages')
       .select('url, title, content')
-      .eq('website_id', websiteData.id)
+      .eq('website_id', websiteId)
       .neq('url', url);
 
     if (pagesError) {
@@ -82,9 +94,23 @@ serve(async (req) => {
       throw new Error('Failed to fetch existing pages');
     }
 
-    // Log detailed information about fetched pages
-    logger.info(`Found ${existingPages?.length || 0} existing pages to analyze`);
-    logger.info('URL patterns found:', existingPages?.map(p => new URL(p.url).pathname));
+    // Store or update the current page
+    const { error: upsertError } = await supabase
+      .from('pages')
+      .upsert({
+        website_id: websiteId,
+        url,
+        title,
+        content,
+        last_crawled_at: new Date().toISOString()
+      }, {
+        onConflict: 'url'
+      });
+
+    if (upsertError) {
+      logger.error('Error storing page:', upsertError);
+      throw new Error(`Failed to store page: ${upsertError.message}`);
+    }
 
     // Analyze content with OpenAI
     logger.info('Starting OpenAI analysis');
