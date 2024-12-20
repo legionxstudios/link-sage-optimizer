@@ -6,7 +6,7 @@ import { corsHeaders } from "./utils/cors.ts";
 console.log("Process sitemap function started");
 
 serve(async (req) => {
-  // Always handle CORS preflight first
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { 
       status: 204, 
@@ -15,12 +15,9 @@ serve(async (req) => {
   }
 
   try {
-    // Validate request method
     if (req.method !== 'POST') {
       return new Response(
-        JSON.stringify({ 
-          error: 'Method not allowed' 
-        }),
+        JSON.stringify({ error: 'Method not allowed' }),
         { 
           status: 405, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -28,37 +25,14 @@ serve(async (req) => {
       );
     }
 
-    // Parse and validate request body
-    let requestData;
-    try {
-      const bodyText = await req.text();
-      console.log('Raw request body:', bodyText);
-      
-      if (!bodyText) {
-        throw new Error('Empty request body');
-      }
-      
-      requestData = JSON.parse(bodyText);
-      console.log('Parsed request data:', requestData);
-    } catch (error) {
-      console.error('Error parsing request body:', error);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Invalid JSON in request body',
-          details: error.message 
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
+    const requestData = await req.json();
+    console.log('Parsed request data:', requestData);
 
     if (!requestData?.url) {
       return new Response(
         JSON.stringify({ 
           error: 'Invalid request body', 
-          details: 'URL is required in the request body' 
+          details: 'URL is required' 
         }),
         { 
           status: 400, 
@@ -69,11 +43,9 @@ serve(async (req) => {
 
     const { url } = requestData;
 
-    // Validate URL format
     try {
       new URL(url);
     } catch (e) {
-      console.error('Invalid URL format:', url);
       return new Response(
         JSON.stringify({ 
           error: 'Invalid URL format', 
@@ -88,13 +60,13 @@ serve(async (req) => {
 
     console.log('Starting sitemap fetch and parse for:', url);
     const { urls, source } = await fetchAndParseSitemap(url);
-    console.log(`Successfully found ${urls.length} URLs from ${source}`);
+    console.log(`Found ${urls.length} URLs from ${source}`);
 
     if (urls.length === 0) {
       return new Response(
         JSON.stringify({ 
           error: 'No URLs found',
-          details: 'Could not find any valid URLs in the sitemap or page content.'
+          details: 'No valid URLs in sitemap or page content.'
         }),
         { 
           status: 400, 
