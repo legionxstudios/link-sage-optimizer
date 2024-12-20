@@ -1,9 +1,12 @@
 import { ExistingPage } from "../types.ts";
 
 export interface SuggestionGeneratorOptions {
-  keywords: { [key: string]: string[] };
+  keywords: {
+    [key: string]: string[];
+  };
   existingPages: ExistingPage[];
   sourceUrl: string;
+  sourceContent: string;
 }
 
 export interface Suggestion {

@@ -33,22 +33,45 @@ export function calculateRelevanceScore(keyword: string, page: ExistingPage): nu
   }
 }
 
-export function extractContext(content: string, keyword: string): string {
+export function extractContext(content: string, keyword: string, contextLength: number = 100): string {
   try {
-    const keywordLower = keyword.toLowerCase();
-    const contentLower = content.toLowerCase();
-    const keywordIndex = contentLower.indexOf(keywordLower);
+    if (!content || !keyword) {
+      logger.warn('Missing content or keyword for context extraction');
+      return "";
+    }
+
+    // Create pattern with word boundaries to find exact matches
+    const pattern = new RegExp(`\\b${keyword}\\b`, 'i');
+    const match = pattern.exec(content);
     
-    if (keywordIndex === -1) return "";
+    if (!match) {
+      logger.info(`No exact match found for keyword "${keyword}" in content`);
+      return "";
+    }
+
+    const matchStart = match.index;
+    const matchEnd = matchStart + keyword.length;
     
-    const start = Math.max(0, keywordIndex - 100);
-    const end = Math.min(content.length, keywordIndex + keyword.length + 100);
-    let context = content.slice(start, end).trim();
+    // Get surrounding context
+    const contextStart = Math.max(0, matchStart - contextLength);
+    const contextEnd = Math.min(content.length, matchEnd + contextLength);
     
-    const regex = new RegExp(keyword, 'gi');
-    context = context.replace(regex, `[${keyword}]`);
+    // Extract the context and the exact matched text
+    const exactMatch = content.slice(matchStart, matchEnd);
+    let context = content.slice(contextStart, contextEnd).trim();
     
+    // Replace the exact match with a highlighted version
+    context = context.replace(exactMatch, `[${exactMatch}]`);
+    
+    // Clean up the context
+    context = context
+      .replace(/\s+/g, ' ')  // Replace multiple spaces with single space
+      .replace(/\n+/g, ' ')  // Replace newlines with spaces
+      .trim();
+    
+    logger.info(`Extracted context for "${keyword}": ${context}`);
     return context;
+    
   } catch (error) {
     logger.error(`Error extracting context for keyword "${keyword}":`, error);
     return "";

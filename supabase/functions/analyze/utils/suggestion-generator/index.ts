@@ -6,7 +6,8 @@ import { calculateRelevanceScore, extractContext } from "./scoring.ts";
 export function generateSuggestions({
   keywords,
   existingPages,
-  sourceUrl
+  sourceUrl,
+  sourceContent
 }: SuggestionGeneratorOptions): Suggestion[] {
   try {
     logger.info('Starting suggestion generation with keywords:', keywords);
@@ -15,6 +16,11 @@ export function generateSuggestions({
     if (!sourceUrl) {
       logger.error('Source URL is undefined');
       throw new Error('Source URL is required for suggestion generation');
+    }
+
+    if (!sourceContent) {
+      logger.error('Source content is undefined');
+      throw new Error('Source content is required for context extraction');
     }
 
     if (!isValidContentUrl(sourceUrl)) {
@@ -49,10 +55,17 @@ export function generateSuggestions({
           continue;
         }
 
-        const actualKeyword = keyword.split('(')[0].trim().toLowerCase();
+        const actualKeyword = keyword.split('(')[0].trim();
         
-        if (usedAnchorTexts.has(actualKeyword)) {
+        if (usedAnchorTexts.has(actualKeyword.toLowerCase())) {
           logger.info(`Skipping duplicate anchor text: "${actualKeyword}"`);
+          continue;
+        }
+
+        // Find the context in the source content first
+        const context = extractContext(sourceContent, actualKeyword);
+        if (!context) {
+          logger.info(`No valid context found for keyword "${actualKeyword}" in source content`);
           continue;
         }
 
@@ -66,12 +79,14 @@ export function generateSuggestions({
             }
             
             const urlSlug = new URL(page.url).pathname.toLowerCase();
-            if (urlSlug.includes(actualKeyword.replace(/\s+/g, '-'))) {
+            const keywordLower = actualKeyword.toLowerCase();
+            
+            if (urlSlug.includes(keywordLower.replace(/\s+/g, '-'))) {
               return true;
             }
             
-            return page.title?.toLowerCase().includes(actualKeyword) ||
-                   page.content?.toLowerCase().includes(actualKeyword);
+            return page.title?.toLowerCase().includes(keywordLower) ||
+                   page.content?.toLowerCase().includes(keywordLower);
           } catch (error) {
             logger.error(`Error processing page URL ${page.url}:`, error);
             return false;
@@ -94,16 +109,16 @@ export function generateSuggestions({
 
         if (bestMatch && bestMatch.url && !usedUrls.has(bestMatch.url)) {
           suggestions.push({
-            suggestedAnchorText: keyword.split('(')[0].trim(),
+            suggestedAnchorText: actualKeyword,
             targetUrl: bestMatch.url,
             targetTitle: bestMatch.title || '',
-            context: extractContext(bestMatch.content || '', actualKeyword),
+            context: context,
             matchType: matchType,
             relevanceScore: bestScore
           });
           
           usedUrls.add(bestMatch.url);
-          usedAnchorTexts.add(actualKeyword);
+          usedAnchorTexts.add(actualKeyword.toLowerCase());
           logger.info(`Added suggestion for "${actualKeyword}" -> ${bestMatch.url} (score: ${bestScore})`);
         }
 
